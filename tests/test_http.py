@@ -44,3 +44,8 @@ def test_persistent_429_explains_the_rate_limit(api):
     queue += [_Resp(429, {"Retry-After": "2"}) for _ in range(20)]
     with pytest.raises(RuntimeError, match="rate limit"):
         http.get_json("https://example.org/c")
+
+
+def test_default_user_agent_has_contact_url():
+    # Without contact info Wikimedia limits a client to 10 requests/minute (measured: 429 after 9).
+    assert "https://" in http.USER_AGENT or "@" in http.USER_AGENT

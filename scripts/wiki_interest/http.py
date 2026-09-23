@@ -24,10 +24,13 @@ import requests  # noqa: E402
 SKILL_DIR = Path(__file__).resolve().parents[2]  # scripts/wiki_interest/http.py -> skill root
 CACHE_DIR = Path(os.environ.get("WIKI_INTEREST_CACHE", SKILL_DIR / ".cache"))
 
-# Wikimedia requires a descriptive User-Agent. Set WIKI_INTEREST_UA to add contact info.
+# Wikimedia wants a User-Agent with contact info (URL or email): without it the quota is
+# 10 requests/minute instead of 200, and a 15-language run takes minutes. The project URL is
+# the contact; set WIKI_INTEREST_UA to identify your own deployment instead.
+PROJECT_URL = "https://github.com/val10010/wiki-interest"
 USER_AGENT = os.environ.get(
     "WIKI_INTEREST_UA",
-    "wiki-interest-skill/1.0 (agent skill for pageview research; python-requests)",
+    f"wiki-interest-skill/1.0 ({PROJECT_URL}; agent skill for pageview research) python-requests",
 )
 
 _session = requests.Session()
@@ -87,8 +90,7 @@ def get_json(url: str, params: dict | None = None, ttl: float | None = None,
             limited += 1
             if limited > RATE_LIMIT_RETRIES:
                 raise RuntimeError(f"Wikimedia rate limit (HTTP 429) persists for {r.url}. Wait a minute and "
-                                   "rerun the same command: finished downloads are cached. Set WIKI_INTEREST_UA "
-                                   "with contact info (URL or email) for a higher quota.")
+                                   "rerun the same command: finished downloads are cached.")
             time.sleep(_retry_after(r.headers.get("Retry-After"), limited))
             continue
         if r.status_code >= 500:
