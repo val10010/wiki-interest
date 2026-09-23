@@ -45,6 +45,45 @@
 For each series the tool writes one sentence (`verdicts`, in the report language): direction, change, share change, trend, volume, reliability with cap, seasonal peaks, excluded spikes, and the proxy flag. The direction wording comes straight from `direction`. If views moved ≥ 10 % but the share of the edition moved < 10 %, the verdict says the change is edition-wide traffic. The agent quotes verdicts instead of phrasing conclusions, because in a Haiku 4.5 run the model called a `flat` series "growing" and merged numbers from different columns.
 
 
+## Calibration (`evals/calibrate_stats.py`)
+
+Synthetic 24-month series with known truth: seasonality with a random phase, autocorrelated AR(1) noise (φ = 0.5),
+optional one-off spike. Noise levels are measured, not guessed: the robust s.d. of the month-to-month log change of
+15 real articles ranged 0.10–0.47, median 0.17 (large, calm articles ≈ 0.12).
+
+| scenario (24 months, 1000 series each) | growing | flat | declining | unclear | reliability high | growing AND high |
+|---|---|---|---|---|---|---|
+| flat, sigma 0.12 | 8% | 79% | 6% | 8% | 52% | 8% |
+| flat, sigma 0.17 (typical) | 11% | 65% | 12% | 12% | 49% | 11% |
+| flat, sigma 0.25 | 14% | 48% | 16% | 22% | 48% | 14% |
+| flat + one spike x5, sigma 0.17 | 14% | 62% | 10% | 13% | 33% | 14% |
+| +10%/yr, sigma 0.12 | 40% | 48% | 0% | 12% | 74% | 40% |
+| +20%/yr, sigma 0.12 | 79% | 14% | 0% | 7% | 94% | 79% |
+| +20%/yr, sigma 0.17 | 72% | 20% | 0% | 8% | 85% | 72% |
+| +50%/yr, sigma 0.17 | 100% | 0% | 0% | 0% | 100% | 100% |
+| -20%/yr, sigma 0.17 | 0% | 12% | 82% | 6% | 91% | 0% |
+| +50%/yr, 150 views/mo, sigma 0.25 | 96% | 1% | 0% | 2% | 0% | 0% |
+
+How to read it:
+- **A flat topic is called "growing" in 8–14 % of cases**, always with high reliability (last column). The cause is
+  month-to-month noise that persists for several months: twelve months can sit above the previous twelve by chance,
+  and the Mann–Kendall p-value is optimistic for autocorrelated data. A Hamed–Rao autocorrelation correction was
+  tried and did not help (n = 24 is too short to estimate the autocorrelation). Requiring p < 0.05 instead of 0.2
+  would cut false "growing" to ≈ 7 % but detect a real +20 %/yr trend in 57 % instead of 72 % of cases; the current
+  rule keeps the higher sensitivity. So a single "growing" verdict is a hypothesis, which the caveats say.
+- Real growth of +20 %/yr is detected in 72–79 %, +50 %/yr in 100 %. +10 %/yr sits on the ±10 % threshold (40 %).
+- A spike ×5 does not create a false trend (spike filter).
+- Low volume works as intended: +50 %/yr at 150 views/month is detected but never rated high.
+- Theil–Sen matches `scipy.stats.theilslopes` exactly; Mann–Kendall p differs from `scipy.stats.kendalltau` by
+  ≤ 0.02 (we use the continuity correction).
+
+## Data cross-check
+
+Monthly views used by the tool were compared with the sum of the API's daily views (what pageviews.wmcloud.org
+shows) for 6 articles × 36 months, including a leap February, `AC/DC` (slash in the title), Turkish `İ` and
+Vietnamese diacritics: all 216 values identical. Edition totals (`aggregate`) differ by ≤ 0.25 %, because Wikimedia
+aggregates monthly and daily totals separately; negligible next to the ±10 % thresholds.
+
 ## Known limitations
 
 - Views measure curiosity or information need, not purchase intent. Students doing homework, news readers and professionals all look the same.
@@ -52,4 +91,4 @@ For each series the tool writes one sentence (`verdicts`, in the report language
 - One article ≠ one topic. Use `A+B` to sum related articles and `--include-redirects` to add redirect views (up to 30 redirects per article).
 - Article renames or creation inside the period produce zeros at the start. This is flagged as "no views before …".
 - `agent=user` still contains some undetected bots. Spike filtering removes the most obvious cases. Sustained bot traffic is not detected.
-- Mann–Kendall p-values are approximate (autocorrelation, n = 24).
+- Mann–Kendall p-values are approximate (autocorrelation, n = 24); see Calibration for the resulting false-trend rate.

@@ -58,6 +58,7 @@ SKELETON = {
     "uk": {"data": "**Дані:** Wikipedia, {start} – {end} ({n} міс.); тема: {topics}.",
            "by_lang": "**По мовах:**", "missing": "**Статті немає:** {langs} — тема там не розвинена (це теж сигнал).",
            "rank": "**Порівняння мов** (частка в трафіку розділу): {share}. **Обсяг:** {volume}.",
+           "same": " (≈ без змін)",
            "slot": "**Висновок:** <ЗАПОВНИ: 1–3 речення лише з рядків вище — що це означає для рішення і що "
                    "перевірити далі. Без фактів і узагальнень, яких немає вище.>",
            "limits": "**Обмеження:** перегляди Wikipedia — сигнал цікавості, а не готовності платити; "
@@ -68,6 +69,7 @@ SKELETON = {
     "en": {"data": "**Data:** Wikipedia, {start} – {end} ({n} months); topic: {topics}.",
            "by_lang": "**By language:**", "missing": "**No article:** {langs} — the topic is undeveloped there (itself a signal).",
            "rank": "**Languages compared** (share of edition traffic): {share}. **Volume:** {volume}.",
+           "same": " (≈ no change)",
            "slot": "**Conclusion:** <FILL: 1–3 sentences using only the lines above — what it means for the "
                    "decision and what to check next. No facts or generalisations not stated above.>",
            "limits": "**Limits:** Wikipedia views measure curiosity, not willingness to pay; "
@@ -163,11 +165,15 @@ def answer_skeleton(run_dir: Path, analysis: dict) -> str:
     if len(series) >= 2:
         def tag(s):
             return s["lang"] + (f" ({s['topic']})" if s.get("multi_topic") else "")
+
+        def share(s):  # same ±10% band as the verdict's "share barely moved", so the two never disagree
+            x = s["stats"]["growth_share_pct"]
+            return _pct_txt(x) + (k["same"] if abs(x) < 10 else "")
         by_share = sorted((s for s in series if s["stats"].get("growth_share_pct") is not None),
                           key=lambda s: -s["stats"]["growth_share_pct"])
         by_vol = sorted(series, key=lambda s: -(s["stats"].get("median_monthly") or 0))
         lines.append(k["rank"].format(
-            share=" > ".join(f"{tag(s)} {_pct_txt(s['stats']['growth_share_pct'])}" for s in by_share) or "—",
+            share=" > ".join(f"{tag(s)} {share(s)}" for s in by_share) or "—",
             volume=" > ".join(f"{tag(s)} {s['stats'].get('median_monthly')}" for s in by_vol)))
     lines.append(k["slot"])
     limits = k["limits"]

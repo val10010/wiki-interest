@@ -1,3 +1,4 @@
 -r requirements.txt
 pytest>=8
 openai>=1.40   # only for evals/run_agent.py (OpenRouter is OpenAI-compatible)
+scipy>=1.11    # only for evals/calibrate_stats.py (reference Theil-Sen / Kendall tau)

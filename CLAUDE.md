@@ -25,6 +25,7 @@ scripts/wi show runs/<run>   |   scripts/wi runs                   # reprint / l
 .venv/bin/python -m pytest                                         # all tests, offline (fake API)
 .venv/bin/python -m pytest tests/test_cli.py::test_end_to_end      # single test
 OPENROUTER_API_KEY=… .venv/bin/python evals/run_agent.py --case fasting_pl_cs   # cheap-model scenario
+.venv/bin/python evals/calibrate_stats.py                         # stats vs synthetic truth (needs scipy)
 ```
 
 `scripts/wi` always `cd`s to the root and sets `PYTHONPATH=scripts`, so relative `runs/...` paths resolve against

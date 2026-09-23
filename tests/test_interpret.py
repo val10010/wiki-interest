@@ -36,3 +36,16 @@ def test_skeleton_single_language_has_no_comparison(series_with):
                 "topics": [{"topic": "t", "missing_languages": []}], "series": [series_with()]}
     sk = interpret.answer_skeleton(Path("runs/x"), analysis)
     assert "**Порівняння мов**" not in sk and sk.count("<ЗАПОВНИ") == 1
+
+
+def test_comparison_line_marks_share_changes_within_noise(series_with):
+    # Haiku read "vi +2.4% > tr +0.6% > ..." as "vi is the only growing audience", although the
+    # verdicts of both say the share barely moved. The ranking must not contradict the verdicts.
+    langs = {"vi": 2.4, "tr": 0.6, "id": -20.1}
+    series = [dict(series_with(growth_pct=-20.0, growth_share_pct=g), lang=l) for l, g in langs.items()]
+    analysis = {"ui": "uk", "period": {"start": "2024-01", "end": "2025-12", "months": 24},
+                "topics": [{"topic": "t", "missing_languages": []}], "series": series}
+    line = next(l for l in interpret.answer_skeleton(Path("runs/x"), analysis).split("\n") if "Порівняння" in l)
+    assert "vi +2.4% (≈ без змін) > tr +0.6% (≈ без змін) > id -20.1%" in line
+    analysis["ui"] = "en"
+    assert "vi +2.4% (≈ no change)" in interpret.answer_skeleton(Path("runs/x"), analysis)
