@@ -35,3 +35,8 @@ def test_run_name_depends_on_languages():
 def test_bad_month_gives_clear_error():
     with pytest.raises(ValueError, match="YYYY-MM"):
         wiki.parse_month("bad")
+
+
+def test_start_after_end_gives_clear_error():
+    with pytest.raises(ValueError, match="before"):
+        pipeline.period(24, start="2026-05", end="2025-01")

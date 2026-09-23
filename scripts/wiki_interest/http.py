@@ -34,6 +34,9 @@ _session = requests.Session()
 _session.headers.update({"User-Agent": USER_AGENT, "Accept": "application/json"})
 
 
+RATE_LIMIT_RETRIES = 8  # 429s tolerated per request; each waits Retry-After (the quota is per minute)
+
+
 class NotFound(Exception):
     """API answered 404 (e.g. article has no views in the range)."""
 
@@ -66,23 +69,45 @@ def get_json(url: str, params: dict | None = None, ttl: float | None = None,
                 f.write(json.dumps({"key": path.stem, "url": url, "params": params}, ensure_ascii=False) + "\n")
         raise NotFound(url)
 
-    last_err = None
-    for attempt in range(retries):
+    last_err, errors, limited = None, 0, 0
+    while True:
         try:
             r = _session.get(url, params=params, timeout=30)
         except requests.RequestException as e:  # network hiccup
-            last_err = e
-            time.sleep(1.5 * (attempt + 1))
+            last_err, errors = e, errors + 1
+            if errors >= retries:
+                break
+            time.sleep(1.5 * errors)
             continue
         if r.status_code == 404:
             path.write_text(json.dumps({"__not_found__": True}), encoding="utf-8")
             raise NotFound(url)
-        if r.status_code == 429 or r.status_code >= 500:
-            last_err = RuntimeError(f"HTTP {r.status_code} for {r.url}")
-            time.sleep(2 * (attempt + 1))
+        if r.status_code == 429:
+            # Per-minute quota exceeded: wait as the server says, then continue where we were.
+            limited += 1
+            if limited > RATE_LIMIT_RETRIES:
+                raise RuntimeError(f"Wikimedia rate limit (HTTP 429) persists for {r.url}. Wait a minute and "
+                                   "rerun the same command: finished downloads are cached. Set WIKI_INTEREST_UA "
+                                   "with contact info (URL or email) for a higher quota.")
+            time.sleep(_retry_after(r.headers.get("Retry-After"), limited))
+            continue
+        if r.status_code >= 500:
+            last_err, errors = RuntimeError(f"HTTP {r.status_code} for {r.url}"), errors + 1
+            if errors >= retries:
+                break
+            time.sleep(2 * errors)
             continue
         r.raise_for_status()
         data = r.json()
         path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
         return data
     raise RuntimeError(f"Request failed after {retries} attempts: {last_err}")
+
+
+def _retry_after(header: str | None, attempt: int) -> float:
+    """Seconds to wait after a 429: the server's Retry-After, else exponential back-off from 5 s
+    (Wikimedia asks for at least five seconds). Capped so a run never hangs for minutes per request."""
+    try:
+        return min(max(float(header), 1.0), 60.0)
+    except (TypeError, ValueError):
+        return min(5.0 * 2 ** (attempt - 1), 60.0)

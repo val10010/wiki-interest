@@ -24,6 +24,9 @@ def period(months: int, start: str | None = None, end: str | None = None) -> tup
     last = wiki.last_full_month()
     e = min(wiki.parse_month(end), last) if end else last
     s = wiki.parse_month(start) if start else wiki.add_months(e, -(months - 1))
+    if s > e:
+        raise ValueError(f"--start {s:%Y-%m} must be before --end {e:%Y-%m} "
+                         f"(the last full month is {last:%Y-%m})")
     return max(s, PAGEVIEWS_START), e
 
 
