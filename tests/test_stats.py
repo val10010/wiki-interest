@@ -60,3 +60,13 @@ def test_normalisation_disagreement_flagged():
 def test_mann_kendall():
     assert stats.mann_kendall_p(np.arange(20.0)) < 0.001
     assert stats.mann_kendall_p(np.array([1.0, 2, 1, 2, 1, 2, 1, 2])) > 0.5
+
+
+def test_direction_needs_significant_trend():
+    # Calibration (METHODOLOGY): with p < 0.2 a flat topic was called "growing" in ~11 % of cases.
+    assert stats.direction(15.0, 12.0, 0.03) == "growing"
+    assert stats.direction(15.0, 12.0, 0.10) == "unclear"
+    assert stats.direction(-15.0, -12.0, 0.03) == "declining"
+    assert stats.direction(-15.0, -12.0, 0.10) == "unclear"
+    assert stats.direction(5.0, 12.0, 0.01) == "flat"
+    assert stats.direction(None, 0.0, 0.5) == "unclear"

@@ -14,6 +14,7 @@ SPIKE_RATIO = 1.8      # ... and at least this many times the local median
 SEASONAL_RATIO = 1.5   # same month a year apart this elevated -> seasonal peak, not anomaly
 LOW_VOLUME = 3000      # median monthly views below this -> "low volume"
 VERY_LOW_VOLUME = 300
+TREND_P = 0.05        # growing/declining needs a significant trend; 0.2 gave ~11 % false "growing" (calibration)
 
 
 def _pct(new: float, old: float) -> float | None:
@@ -92,6 +93,17 @@ def window_growth(v: np.ndarray) -> dict:
     recent, prev = v[-h:], v[-2 * h:-h] if h else v
     return {"method": f"last {h} months vs previous {h}", "growth_pct": _pct(recent.mean(), prev.mean()) if h else None,
             "months_up_yoy": None, "months_compared": None, "seasonality_controlled": False}
+
+
+def direction(growth_pct: float | None, trend_annual_pct: float, p: float) -> str:
+    """growing / declining need >= 10 % change, a trend of the same sign and p < TREND_P."""
+    if growth_pct is None:
+        return "unclear"
+    if growth_pct >= 10 and trend_annual_pct > 0 and p < TREND_P:
+        return "growing"
+    if growth_pct <= -10 and trend_annual_pct < 0 and p < TREND_P:
+        return "declining"
+    return "flat" if abs(growth_pct) < 10 else "unclear"
 
 
 def analyze_series(months: list[str], views: list[int], project_total: list[int] | None) -> dict:
@@ -193,16 +205,6 @@ def analyze_series(months: list[str], views: list[int], project_total: list[int]
         reasons.append(f"reliability {cap} (score alone would give more)")
     out["reliability"] = level
     out["reliability_cap"] = cap
-    if g is None:
-        direction = "unclear"
-    elif g >= 10 and out["trend_annual_pct"] > 0 and p < 0.2:
-        direction = "growing"
-    elif g <= -10 and out["trend_annual_pct"] < 0 and p < 0.2:
-        direction = "declining"
-    elif abs(g) < 10:
-        direction = "flat"
-    else:
-        direction = "unclear"
-    out["direction"] = direction
+    out["direction"] = direction(g, out["trend_annual_pct"], p)
     out["reasons"] = reasons
     return out

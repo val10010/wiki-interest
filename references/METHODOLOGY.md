@@ -31,7 +31,7 @@
 
 ≥ 8 → high, 5–7 → medium, else low. **Caps:** median < 300 views/mo → always low. Median < 3000 → at most medium. A cap is stored in `reliability_cap`, shown in the table as `(…, volume cap)` and explained in `reasons`, so "low (8/10)" is never left unexplained. Every lost point adds a human-readable reason.
 
-**Direction:** `growing` if clean growth ≥ +10 %, trend > 0 and p < 0.2. `declining` is the mirror case. `flat` if |growth| < 10 %. Otherwise `unclear`.
+**Direction:** `growing` if clean growth ≥ +10 %, trend > 0 and p < 0.05 (calibrated, see below; p < 0.2 was used before). `declining` is the mirror case. `flat` if |growth| < 10 %. Otherwise `unclear`.
 
 ## Measurement warnings
 
@@ -53,25 +53,27 @@ optional one-off spike. Noise levels are measured, not guessed: the robust s.d. 
 
 | scenario (24 months, 1000 series each) | growing | flat | declining | unclear | reliability high | growing AND high |
 |---|---|---|---|---|---|---|
-| flat, sigma 0.12 | 8% | 79% | 6% | 8% | 52% | 8% |
-| flat, sigma 0.17 (typical) | 11% | 65% | 12% | 12% | 49% | 11% |
-| flat, sigma 0.25 | 14% | 48% | 16% | 22% | 48% | 14% |
-| flat + one spike x5, sigma 0.17 | 14% | 62% | 10% | 13% | 33% | 14% |
-| +10%/yr, sigma 0.12 | 40% | 48% | 0% | 12% | 74% | 40% |
-| +20%/yr, sigma 0.12 | 79% | 14% | 0% | 7% | 94% | 79% |
-| +20%/yr, sigma 0.17 | 72% | 20% | 0% | 8% | 85% | 72% |
-| +50%/yr, sigma 0.17 | 100% | 0% | 0% | 0% | 100% | 100% |
-| -20%/yr, sigma 0.17 | 0% | 12% | 82% | 6% | 91% | 0% |
-| +50%/yr, 150 views/mo, sigma 0.25 | 96% | 1% | 0% | 2% | 0% | 0% |
+| flat, sigma 0.12 | 6% | 79% | 4% | 11% | 52% | 6% |
+| flat, sigma 0.17 (typical) | 7% | 65% | 8% | 20% | 49% | 7% |
+| flat, sigma 0.25 | 7% | 48% | 9% | 36% | 48% | 7% |
+| flat + one spike x5, sigma 0.17 | 9% | 62% | 6% | 23% | 33% | 9% |
+| +10%/yr, sigma 0.12 | 29% | 48% | 0% | 23% | 74% | 29% |
+| +20%/yr, sigma 0.12 | 68% | 14% | 0% | 18% | 94% | 68% |
+| +20%/yr, sigma 0.17 | 59% | 20% | 0% | 21% | 85% | 59% |
+| +50%/yr, sigma 0.17 | 99% | 0% | 0% | 1% | 100% | 99% |
+| -20%/yr, sigma 0.17 | 0% | 12% | 72% | 16% | 91% | 0% |
+| +50%/yr, 150 views/mo, sigma 0.25 | 92% | 1% | 0% | 7% | 0% | 0% |
 
 How to read it:
-- **A flat topic is called "growing" in 8–14 % of cases**, always with high reliability (last column). The cause is
-  month-to-month noise that persists for several months: twelve months can sit above the previous twelve by chance,
-  and the Mann–Kendall p-value is optimistic for autocorrelated data. A Hamed–Rao autocorrelation correction was
-  tried and did not help (n = 24 is too short to estimate the autocorrelation). Requiring p < 0.05 instead of 0.2
-  would cut false "growing" to ≈ 7 % but detect a real +20 %/yr trend in 57 % instead of 72 % of cases; the current
-  rule keeps the higher sensitivity. So a single "growing" verdict is a hypothesis, which the caveats say.
-- Real growth of +20 %/yr is detected in 72–79 %, +50 %/yr in 100 %. +10 %/yr sits on the ±10 % threshold (40 %).
+- **A flat topic is called "growing" in 6–9 % of cases** (was 8–14 % with the earlier p < 0.2), and then with high
+  reliability (last column). The cause is month-to-month noise that persists for several months: twelve months can
+  sit above the previous twelve by chance, and the Mann–Kendall p-value is optimistic for autocorrelated data.
+  A Hamed–Rao autocorrelation correction was tried and did not help (n = 24 is too short to estimate the
+  autocorrelation). The threshold was tightened to p < 0.05 because for an investment decision a false "growing"
+  costs more than a missed modest trend; the price is sensitivity. A single "growing" verdict stays a hypothesis,
+  which the caveats say.
+- Real growth of +20 %/yr is detected in 59–68 % (72–79 % with p < 0.2), +50 %/yr in 99 %. +10 %/yr sits on the
+  ±10 % threshold (29 %). Missed trends mostly land in `unclear` ("the data does not confirm a trend"), not in `flat`.
 - A spike ×5 does not create a false trend (spike filter).
 - Low volume works as intended: +50 %/yr at 150 views/month is detected but never rated high.
 - Theil–Sen matches `scipy.stats.theilslopes` exactly; Mann–Kendall p differs from `scipy.stats.kendalltau` by
