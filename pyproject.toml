@@ -1,0 +1,8 @@
+# Only tool configuration: the skill is run via scripts/wi, not installed as a package.
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["scripts", "tests"]
+addopts = "-q"
+filterwarnings = [
+    "ignore::DeprecationWarning",   # matplotlib / pyparsing internals, not ours
+]

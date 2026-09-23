@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# Launcher: creates .venv in the skill root on first use, then runs the CLI.
+# Works from any directory; relative paths (runs/...) resolve against the skill root.
+set -euo pipefail
+SCRIPTS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$(dirname "$SCRIPTS")"
+PY="${WIKI_INTEREST_PYTHON:-python3}"
+# The marker is written only after a successful install, so an interrupted first run
+# (e.g. network loss during pip) is repaired on the next call instead of failing forever.
+MARKER="$ROOT/.venv/.wi-installed"
+if [ ! -f "$MARKER" ] || [ "$ROOT/requirements.txt" -nt "$MARKER" ]; then
+  if [ ! -x "$ROOT/.venv/bin/python" ]; then
+    "$PY" -c 'import sys; sys.exit(sys.version_info < (3, 9))' 2>/dev/null || {
+      echo '{"error": "Python >= 3.9 required", "hint": "set WIKI_INTEREST_PYTHON=/path/to/python3.9+"}'
+      exit 1
+    }
+    "$PY" -m venv "$ROOT/.venv" >&2
+  fi
+  "$ROOT/.venv/bin/pip" install -q -r "$ROOT/requirements.txt" >&2 || {
+    echo '{"error": "installing dependencies failed", "hint": "check network access and rerun the same command"}'
+    exit 1
+  }
+  touch "$MARKER"
+fi
+cd "$ROOT"
+PYTHONPATH="$SCRIPTS${PYTHONPATH:+:$PYTHONPATH}" exec "$ROOT/.venv/bin/python" -m wiki_interest "$@"

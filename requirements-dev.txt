@@ -1,0 +1,3 @@
+-r requirements.txt
+pytest>=8
+openai>=1.40   # only for evals/run_agent.py (OpenRouter is OpenAI-compatible)

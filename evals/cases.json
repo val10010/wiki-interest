@@ -1,0 +1,91 @@
+[
+ {
+  "id": "fasting_pl_cs",
+  "turns": [
+   "Порівняй зростання інтересу до інтервального голодування в польськомовній та чеськомовній Wikipedia за останні два роки."
+  ],
+  "checks": {
+   "commands": [
+    "analyze",
+    "--langs[= ]\\S*pl",
+    "--langs[= ]\\S*cs"
+   ],
+   "answer": [
+    "%",
+    "(надійн|reliab)",
+    "(польськ|pl\\b|polish)",
+    "(плат|willingness to pay)",
+    "(proxy|інш\\w* понят|не те саме|different concept|немає [^.]*статт|no [^.]*article)"
+   ],
+   "answer_not": [
+    "(<ЗАПОВНИ|<FILL)"
+   ]
+  }
+ },
+ {
+  "id": "astronomy_uk_trust",
+  "turns": [
+   "Ми думаємо додати курс з астрономії до освітнього застосунку. Чи зростає інтерес до цієї теми в україномовній Wikipedia, і наскільки цьому зростанню можна довіряти?"
+  ],
+  "checks": {
+   "commands": [
+    "analyze",
+    "--langs[= ]\\S*uk"
+   ],
+   "answer": [
+    "(надійн|довір|reliab)",
+    "%",
+    "(плат|willingness to pay)",
+    "(сезон|вересн|seasonal)"
+   ],
+   "answer_not": [
+    "(<ЗАПОВНИ|<FILL)"
+   ]
+  }
+ },
+ {
+  "id": "english_learning_report",
+  "turns": [
+   "Ми створюємо застосунок для вивчення мов. Порівняй інтерес до вивчення англійської в польській, турецькій, в'єтнамській, індонезійській та іспанській Wikipedia та підготуй короткий звіт: які аудиторії варто дослідити наступними й чому?"
+  ],
+  "checks": {
+   "commands": [
+    "analyze",
+    "report"
+   ],
+   "answer": [
+    "\\.pdf",
+    "(плат|willingness to pay)"
+   ],
+   "files": [
+    "runs/*/report.pdf"
+   ],
+   "answer_not": [
+    "португал",
+    "tech-спільнот",
+    "(<ЗАПОВНИ|<FILL)"
+   ]
+  }
+ },
+ {
+  "id": "followup_change_assumptions",
+  "turns": [
+   "Порівняй інтерес до інтервального голодування в польській та чеській Wikipedia.",
+   "Додай ще словацьку і подивись за три роки замість двох."
+  ],
+  "checks": {
+   "commands": [
+    "--langs[= ]\\S*sk",
+    "(--months[= ]36|--start)"
+   ],
+   "answer": [
+    "(sk|словац)",
+    "(плат|willingness to pay)",
+    "(proxy|інш\\w* понят|не те саме|different concept|немає [^.]*статт|no [^.]*article)"
+   ],
+   "answer_not": [
+    "(<ЗАПОВНИ|<FILL)"
+   ]
+  }
+ }
+]

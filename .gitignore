@@ -1,0 +1,9 @@
+.venv/
+.cache/
+runs/
+evals/transcripts/
+__pycache__/
+*.pyc
+.idea/
+.DS_Store
+HANDOFF.md
