@@ -16,7 +16,7 @@ if [ ! -f "$MARKER" ] || [ "$ROOT/requirements.txt" -nt "$MARKER" ]; then
     }
     "$PY" -m venv "$ROOT/.venv" >&2
   fi
-  "$ROOT/.venv/bin/pip" install -q -r "$ROOT/requirements.txt" >&2 || {
+  "$ROOT/.venv/bin/pip" install -q --disable-pip-version-check -r "$ROOT/requirements.txt" >&2 || {
     echo '{"error": "installing dependencies failed", "hint": "check network access and rerun the same command"}'
     exit 1
   }
