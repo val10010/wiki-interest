@@ -49,3 +49,16 @@ def test_comparison_line_marks_share_changes_within_noise(series_with):
     assert "vi +2.4% (≈ без змін) > tr +0.6% (≈ без змін) > id -20.1%" in line
     analysis["ui"] = "en"
     assert "vi +2.4% (≈ no change)" in interpret.answer_skeleton(Path("runs/x"), analysis)
+
+
+def test_table_sorts_by_share_change_even_when_it_is_exactly_zero(series_with):
+    # `x or y` treated a 0.0 share change as missing and sorted that row by raw growth instead.
+    zero = dict(series_with(growth_pct=50.0, growth_share_pct=0.0), lang="a")
+    small = dict(series_with(growth_pct=-30.0, growth_share_pct=3.0), lang="b")
+    rows = interpret.table_md([zero, small]).split("\n")[2:]
+    assert rows[0].startswith("| t · b") and rows[1].startswith("| t · a")
+
+
+def test_table_shows_tiny_p_values_as_a_bound(series_with):
+    assert "<0.001" in interpret.table_md([series_with(trend_p_value=0.0)])
+    assert "| 0.031 |" in interpret.table_md([series_with(trend_p_value=0.0312)])

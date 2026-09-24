@@ -40,3 +40,25 @@ def test_bad_month_gives_clear_error():
 def test_start_after_end_gives_clear_error():
     with pytest.raises(ValueError, match="before"):
         pipeline.period(24, start="2026-05", end="2025-01")
+
+
+def test_changed_period_is_served_from_cache(analyze, monkeypatch):
+    """README promise: "three years instead of two" downloads nothing; only a new language does.
+
+    Pageviews are requested in canonical ranges, so the cache key does not depend on the period.
+    The test window (ending 2025-08) lies in the closed history, hence one range per series."""
+    from wiki_interest import http
+    keys = []
+    real = wiki.get_json
+
+    def spy(url, params=None, ttl=None, retries=3):
+        if "/metrics/pageviews/" in url:
+            keys.append(http.cache_key(url, params))
+        return real(url, params, ttl, retries)
+    monkeypatch.setattr(wiki, "get_json", spy)
+    analyze("--langs", "pl,cs")
+    assert len(set(keys)) == 4                     # 2 languages x (article + edition total)
+    analyze("--langs", "pl,cs", "--months", "36")  # longer period: same URLs -> disk cache hits
+    assert len(set(keys)) == 4
+    analyze("--langs", "pl,cs,uk", "--months", "36")
+    assert len(set(keys)) == 6                     # only Ukrainian is new

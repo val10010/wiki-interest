@@ -71,13 +71,27 @@ def cmd_report(args):
         raise SystemExit("--conclusion is required: 3-6 sentences based on the numbers in the table.")
     out = Path(args.out) if args.out else run_dir / "report.pdf"
     title = args.title or ("Інтерес до теми у Wikipedia" if ui == "uk" else "Wikipedia interest report")
-    report.save_pdf(analysis, str(out), title, conclusion, interpret.report_caveats(analysis, ui, args.caveat), ui)
-    print(json.dumps({"pdf": str(out)}, ensure_ascii=False))
+    fit = report.save_pdf(analysis, str(out), title, conclusion, interpret.report_caveats(analysis, ui, args.caveat), ui)
+    result = {"pdf": str(out), **fit}
+    if fit["conclusion_truncated"]:
+        result["hint"] = (f"the conclusion did not fit on one page and was cut after {fit['conclusion_lines']} lines: "
+                          f"shorten --conclusion to at most {report.MAX_CONCLUSION_CHARS} characters and rerun")
+    if fit["series_total"] > fit["series_shown"]:
+        result["note"] = (f"the PDF shows the {fit['series_shown']} of {fit['series_total']} series with the largest "
+                          "share change (as in the table); all series stay in analysis.json")
+    print(json.dumps(result, ensure_ascii=False))
+
+
+class _Parser(argparse.ArgumentParser):
+    """argparse prints usage errors to stderr and exits 2; the agent expects JSON on stdout like every
+    other error. Sub-parsers inherit this class automatically."""
+
+    def error(self, message):
+        _fail(f"{self.prog}: {message}", f"see `{interpret.CMD} {self.prog.split(' ', 1)[-1]} -h` for the options")
 
 
 def build_parser() -> argparse.ArgumentParser:
-    ap = argparse.ArgumentParser(prog="wi", description=__doc__,
-                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap = _Parser(prog="wi", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     r = sub.add_parser("resolve", help="find articles for a topic")

@@ -3,15 +3,44 @@ from __future__ import annotations
 
 import datetime as dt
 
+import functools
+
 import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.dates as mdates  # noqa: E402
+import matplotlib.font_manager as fm  # noqa: E402
 import matplotlib.pyplot as plt  # noqa: E402
 import matplotlib.ticker as mticker  # noqa: E402
 import numpy as np  # noqa: E402
+from matplotlib.ft2font import FT2Font  # noqa: E402
 
-plt.rcParams.update({"font.family": "DejaVu Sans", "font.size": 9,
+# DejaVu Sans (bundled with matplotlib) covers Latin, Cyrillic, Greek, Arabic and Hebrew but not CJK,
+# Thai or Indic scripts. Matplotlib falls back per glyph through this list, so article titles such as
+# 英語 render wherever one of these system fonts exists (macOS, Windows, Linux with Noto/Droid).
+FONT_FALLBACKS = ["Arial Unicode MS", "Hiragino Sans", "PingFang SC", "Apple SD Gothic Neo",       # macOS
+                  "Noto Sans CJK JP", "Noto Sans CJK SC", "Noto Sans", "Droid Sans Fallback",      # Linux
+                  "Microsoft YaHei", "Malgun Gothic", "MS Gothic", "Segoe UI"]                     # Windows
+
+
+@functools.lru_cache(maxsize=None)
+def font_families() -> tuple[str, ...]:
+    installed = {f.name for f in fm.fontManager.ttflist}
+    return ("DejaVu Sans",) + tuple(f for f in FONT_FALLBACKS if f in installed)
+
+
+@functools.lru_cache(maxsize=None)
+def _faces() -> tuple[FT2Font, ...]:
+    return tuple(FT2Font(fm.findfont(fm.FontProperties(family=f), fallback_to_default=False))
+                 for f in font_families())
+
+
+def renderable(text: str) -> bool:
+    """True if every character of `text` has a glyph in one of the fonts we can draw with."""
+    return all(any(face.get_char_index(ord(ch)) for face in _faces()) for ch in text if not ch.isspace())
+
+
+plt.rcParams.update({"font.family": list(font_families()), "font.size": 9,
                      "axes.spines.top": False, "axes.spines.right": False})
 PALETTE = ["#2563eb", "#dc2626", "#16a34a", "#9333ea", "#ea580c", "#0891b2",
            "#ca8a04", "#db2777", "#4b5563", "#65a30d"]

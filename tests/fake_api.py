@@ -30,25 +30,34 @@ def _months(a: str, b: str):
     return out
 
 
+ORIGIN = (2023, 9)          # k = 0 here; tests analyse 2023-09 .. 2025-08
+SPIKE_MONTH = (2025, 4)     # cs viral spike (5th month from the end of that window)
+SEEDS = {"pl": 1, "cs": 2, "uk": 3, "en": 4, "sk": 5}
+
+
+def _value(lang: str, y: int, m: int) -> int:
+    """Views for one calendar month: a function of the date, not of the fetched range,
+    so the same month has the same value whichever range the client asks for."""
+    k = (y - ORIGIN[0]) * 12 + (m - ORIGIN[1])
+    rng = np.random.default_rng([SEEDS[lang], y, m])
+    season = 1 + 0.15 * math.cos(2 * math.pi * (m - 1) / 12)  # January peak (New-year diets)
+    if lang == "pl":
+        v = 8000 * (1.4 ** (k / 12)) * season * rng.normal(1, 0.04)
+    elif lang == "cs":
+        v = 5000 * season * rng.normal(1, 0.05)
+        if (y, m) == SPIKE_MONTH:
+            v *= 6  # viral spike
+    elif lang == "sk":
+        v = 2000 * season * rng.normal(1, 0.05)
+    elif lang == "uk":
+        v = 60 * season * rng.normal(1, 0.35)
+    else:
+        v = 90000 * (0.85 ** (k / 12)) * season * rng.normal(1, 0.03)
+    return max(int(v), 0)
+
+
 def _series(lang: str, months):
-    rng = np.random.default_rng({"pl": 1, "cs": 2, "uk": 3, "en": 4, "sk": 5}[lang])
-    out = []
-    for k, (y, m) in enumerate(months):
-        season = 1 + 0.15 * math.cos(2 * math.pi * (m - 1) / 12)  # January peak (New-year diets)
-        if lang == "pl":
-            v = 8000 * (1.4 ** (k / 12)) * season * rng.normal(1, 0.04)
-        elif lang == "cs":
-            v = 5000 * season * rng.normal(1, 0.05)
-            if k == len(months) - 5:
-                v *= 6  # viral spike
-        elif lang == "sk":
-            v = 2000 * season * rng.normal(1, 0.05)
-        elif lang == "uk":
-            v = 60 * season * rng.normal(1, 0.35)
-        else:
-            v = 90000 * (0.85 ** (k / 12)) * season * rng.normal(1, 0.03)
-        out.append(max(int(v), 0))
-    return out
+    return [_value(lang, y, m) for y, m in months]
 
 
 def fake_get_json(url, params=None, ttl=None, retries=3):

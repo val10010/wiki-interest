@@ -43,8 +43,9 @@ plus the whole edition's total, runs `stats.analyze_series` per series → `pipe
 - `analysis.json` is the contract between commands: `show` and `report` only read it, never the network.
   Run names include topics, sorted languages, period and the redirect flag, so a follow-up ("add Slovak") gets a
   new dir; re-running the same question deletes that run's now-stale `report.pdf`.
-- `http.get_json` caches every response in `.cache/` keyed by URL; closed months forever, ranges ending < ~70 days
-  ago for 24 h; 404s are cached too.
+- `http.get_json` caches every response in `.cache/` keyed by URL; 404s are cached too. `wiki._monthly` requests
+  pageviews as two canonical ranges (history to a cutoff 3 months back, forever; the recent tail, 24 h) and slices
+  the period from them, so a changed period is a cache hit. Keep the fake API deterministic per calendar month.
 - `stats.py` holds all maths: spike detection (robust z vs rolling median) with **seasonal peaks** (same month
   elevated a year apart) kept rather than cut, 12-vs-12-month growth, share of edition traffic, Theil–Sen +
   Mann–Kendall, and a 0–10 reliability score with volume caps. Thresholds are documented in
@@ -55,6 +56,9 @@ plus the whole edition's total, runs `stats.analyze_series` per series → `pipe
 - An `--article lang:Title` added to a topic is checked against Wikidata (`wiki.article_info`); a different item
   → `proxy` on the series → `[proxy]` in the table, a `PROXY` warning, and a caveat forced into the PDF.
 - `report.py` renders the PDF; only the conclusion text comes from the agent, everything else from `analysis.json`.
+  It never drops content silently: `save_pdf` returns what fitted (series shown of total, conclusion truncated,
+  caveats shown) and `cli.cmd_report` turns that into `note` / `hint` for the agent. Fonts: `charts.font_families`
+  adds installed system fonts as per-glyph fallbacks; `charts.renderable` decides when a title must be substituted.
 
 ## Design rule behind most of the code
 

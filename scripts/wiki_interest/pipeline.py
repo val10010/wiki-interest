@@ -15,7 +15,7 @@ from . import charts, interpret, stats, wiki
 from .http import SKILL_DIR
 
 RUNS_DIR = SKILL_DIR / "runs"
-PAGEVIEWS_START = dt.date(2015, 7, 1)  # Pageviews API has no data before July 2015
+PAGEVIEWS_START = wiki.PAGEVIEWS_START
 
 
 # ---------------------------------------------------------------- arguments -> plan

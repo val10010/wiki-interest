@@ -9,6 +9,8 @@ from .http import NotFound, get_json
 RECENT_TTL = 24 * 3600          # data that may still change
 META_TTL = 30 * 24 * 3600       # search results / sitelinks
 PV = "https://wikimedia.org/api/rest_v1/metrics/pageviews"
+PAGEVIEWS_START = dt.date(2015, 7, 1)  # Pageviews API has no data before July 2015
+CLOSED_LAG_MONTHS = 3           # months at least this old never change at Wikimedia -> cached forever
 
 # Largest Wikipedias by user pageviews (rough order). Used for --langs top:N.
 TOP_LANGS = ["en", "ja", "de", "ru", "es", "fr", "it", "zh", "pt", "pl", "fa", "ar",
@@ -48,10 +50,6 @@ def month_range(start: dt.date, end: dt.date) -> list[str]:
         out.append(d.strftime("%Y-%m"))
         d = add_months(d, 1)
     return out
-
-
-def _ttl_for(end: dt.date):
-    return RECENT_TTL if (dt.date.today() - end).days < 70 else None
 
 
 def _range_params(start: dt.date, end: dt.date) -> tuple[str, str]:
@@ -136,35 +134,44 @@ def redirects(lang: str, title: str, cap: int = 30) -> list[str]:
 
 
 # ---------------------------------------------------------------- pageviews
+def _monthly(url_for, start: dt.date, end: dt.date) -> dict[str, int]:
+    """Monthly counts {YYYY-MM: n} for [start, end], months without data = 0.
+
+    The API is asked for two *canonical* ranges instead of the requested one: the closed
+    history (2015-07 .. cutoff, cached forever) and the recent tail (cutoff+1 .. last full
+    month, refreshed after 24 h). Any period is then a slice of cached data, so a follow-up
+    such as "three years instead of two" or "since 2019" costs no requests at all; only a
+    new language or article is downloaded. The cutoff moves once a month.
+    """
+    last = last_full_month()
+    cutoff = add_months(last, -CLOSED_LAG_MONTHS)
+    months = {m: 0 for m in month_range(start, end)}
+    ranges = []
+    if start <= cutoff:
+        ranges.append((PAGEVIEWS_START, cutoff, None))
+    if end > cutoff:
+        ranges.append((add_months(cutoff, 1), last, RECENT_TTL))
+    for a, b, ttl in ranges:
+        try:
+            data = get_json(url_for(*_range_params(a, b)), ttl=ttl)
+        except NotFound:
+            continue
+        for it in data.get("items", []):
+            m = f"{it['timestamp'][:4]}-{it['timestamp'][4:6]}"
+            if m in months:
+                months[m] = int(it["views"])
+    return months
+
+
 def article_views(lang: str, title: str, start: dt.date, end: dt.date,
                   agent: str = "user") -> dict[str, int]:
-    """Monthly views {YYYY-MM: n}. Months without data are 0."""
-    a, b = _range_params(start, end)
+    """Monthly views of one article {YYYY-MM: n}. Months without data are 0."""
     t = quote(title.replace(" ", "_"), safe="")
-    url = f"{PV}/per-article/{lang}.wikipedia/all-access/{agent}/{t}/monthly/{a}/{b}"
-    months = {m: 0 for m in month_range(start, end)}
-    try:
-        data = get_json(url, ttl=_ttl_for(end))
-    except NotFound:
-        return months
-    for it in data.get("items", []):
-        m = f"{it['timestamp'][:4]}-{it['timestamp'][4:6]}"
-        if m in months:
-            months[m] = int(it["views"])
-    return months
+    return _monthly(lambda a, b: f"{PV}/per-article/{lang}.wikipedia/all-access/{agent}/{t}/monthly/{a}/{b}",
+                    start, end)
 
 
 def project_views(lang: str, start: dt.date, end: dt.date, agent: str = "user") -> dict[str, int]:
     """Total monthly views of a whole Wikipedia edition (for normalisation)."""
-    a, b = _range_params(start, end)
-    url = f"{PV}/aggregate/{lang}.wikipedia/all-access/{agent}/monthly/{a}/{b}"
-    months = {m: 0 for m in month_range(start, end)}
-    try:
-        data = get_json(url, ttl=_ttl_for(end))
-    except NotFound:
-        return months
-    for it in data.get("items", []):
-        m = f"{it['timestamp'][:4]}-{it['timestamp'][4:6]}"
-        if m in months:
-            months[m] = int(it["views"])
-    return months
+    return _monthly(lambda a, b: f"{PV}/aggregate/{lang}.wikipedia/all-access/{agent}/monthly/{a}/{b}",
+                    start, end)

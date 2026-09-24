@@ -1,10 +1,9 @@
 """HTTP access to Wikimedia APIs with an on-disk cache.
 
-Every GET is cached as JSON keyed by URL. Historical data never changes, so
-responses whose time range ended long ago are cached forever; responses that
-touch the last ~70 days are refreshed after 24h. Follow-up questions
-("same thing, but for Czech too", "extend to 3 years") therefore reuse
-everything already downloaded and only fetch what is new.
+Every GET is cached as JSON keyed by URL (ttl=None: forever). wiki.py asks for
+pageviews in canonical ranges (closed history forever, recent tail 24 h), so
+follow-up questions ("same thing, but for Czech too", "extend to 3 years")
+reuse everything already downloaded and only fetch what is new.
 """
 from __future__ import annotations
 

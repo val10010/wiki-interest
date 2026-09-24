@@ -9,6 +9,8 @@ import pytest
 
 from wiki_interest import cli, report, wiki
 
+FIT = {"series_shown": 1, "series_total": 1, "conclusion_truncated": False}  # what a mocked save_pdf returns
+
 
 def test_end_to_end(fake, capsys):
     run = fake / "run"
@@ -96,7 +98,7 @@ def test_handpicked_article_of_other_concept_is_marked_proxy(analyze):
 def test_report_always_carries_proxy_caveat(analyze, monkeypatch):
     out = analyze("--langs", "pl,sk", "--article", "sk:Pôst")
     seen = {}
-    monkeypatch.setattr(report, "save_pdf", lambda a, path, title, concl, caveats, ui: seen.update(c=caveats))
+    monkeypatch.setattr(report, "save_pdf", lambda a, path, title, concl, caveats, ui: seen.update(c=caveats) or FIT)
     cli.main(["report", out["run_dir"], "--conclusion", "x"])
     assert seen["c"][0].startswith("Proxy (sk)") and "fasting" in seen["c"][0]
 
@@ -133,3 +135,19 @@ def test_skeleton_flags_proxy_languages(analyze):
 def test_skeleton_english_ui(analyze):
     sk = analyze("--langs", "pl,cs", "--ui", "en")["answer_skeleton"]
     assert "willingness to pay" in sk and "<FILL" in sk
+
+
+def test_argparse_errors_are_json_too(capsys):
+    with pytest.raises(SystemExit) as e:
+        cli.main(["analyze", "--topic", "X", "--months", "abc"])
+    assert e.value.code == 1
+    out = json.loads(capsys.readouterr().out)
+    assert "--months" in out["error"] and "scripts/wi analyze -h" in out["hint"]
+
+
+def test_report_output_tells_what_did_not_fit(analyze, capsys):
+    run = analyze("--langs", "pl")
+    cli.main(["report", run["run_dir"], "--conclusion", "Коротко. " * 300])
+    out = json.loads(capsys.readouterr().out)
+    assert out["conclusion_truncated"] and "shorten --conclusion" in out["hint"]
+    assert out["series_shown"] == out["series_total"] == 1 and "note" not in out

@@ -5,7 +5,7 @@
 - **Source:** Wikimedia Pageviews REST API, `agent=user` (automated/spider traffic excluded by Wikimedia), `all-access` (desktop + mobile web + app), monthly granularity. Data exists from July 2015 onwards. The current, incomplete month is never used.
 - **Topic → articles:** full-text search on the chosen Wikipedia returns candidates. Disambiguation pages and items without a Wikidata id are skipped. The Wikidata item's sitelinks give the title in every language, so all languages refer to *the same concept*, not to a translated keyword.
 - **Normalisation:** for each language edition the total monthly views of the whole edition (`aggregate` endpoint) are fetched. `share = article views / edition views`. This removes platform-level effects (e.g. traffic lost to AI answers or search snippets, or a whole edition growing).
-- **Cache:** every HTTP response is stored in `.cache/`. Closed months are cached forever; ranges that end within ~70 days are refreshed after 24 h.
+- **Cache:** every HTTP response is stored in `.cache/`. Pageviews are requested in two canonical ranges per article and per edition: the closed history (2015-07 up to three months ago, cached forever) and the recent tail (refreshed after 24 h). Any analysis period is a slice of these, so changing the period costs no requests; the cutoff moves once a month.
 - **Runs:** each distinct question (topics × languages × period × redirects) is saved to its own `runs/<name>/`. Follow-ups never overwrite earlier results. Re-running the same question replaces its `analysis.json` and deletes the now-stale `report.pdf`.
 
 ## Per-series statistics (`scripts/wiki_interest/stats.py`)
@@ -31,7 +31,11 @@
 
 ≥ 8 → high, 5–7 → medium, else low. **Caps:** median < 300 views/mo → always low. Median < 3000 → at most medium. A cap is stored in `reliability_cap`, shown in the table as `(…, volume cap)` and explained in `reasons`, so "low (8/10)" is never left unexplained. Every lost point adds a human-readable reason.
 
-**Direction:** `growing` if clean growth ≥ +10 %, trend > 0 and p < 0.05 (calibrated, see below; p < 0.2 was used before). `declining` is the mirror case. `flat` if |growth| < 10 %. Otherwise `unclear`.
+**Direction:** `growing` if clean growth ≥ +10 %, trend > 0 and p < 0.05 (calibrated, see below; p < 0.2 was used before). `declining` is the mirror case. `flat` if |growth| < 10 %. Otherwise `unclear`. The table prints p with three decimals and `<0.001` below that.
+
+## PDF report
+
+One A4 page rendered with matplotlib. The table and the charts show at most 10 series, chosen and ordered like the markdown table (share change, then raw change); with more series the page says how many are shown and the `report` command returns `series_shown` / `series_total`. The agent's conclusion is wrapped at 8.6 pt; if it does not fit in 9 lines the font shrinks to 7.8 and then 7 pt (13 lines); beyond that it is cut with an ellipsis and the command returns `conclusion_truncated: true` with a hint. The method paragraph always fits; caveats fill the remaining lines in priority order (proxy, low reliability, user caveats, then the general ones) and the count of shown ones is returned. Titles in scripts that no installed font can draw (CJK, Thai, Indic on a bare Linux box) are replaced by the English label of the concept, with a note under the table.
 
 ## Measurement warnings
 

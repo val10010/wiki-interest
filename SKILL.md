@@ -1,13 +1,15 @@
 ---
 name: wiki-interest
 description: Measure and compare public interest in a topic across Wikipedia language editions (Wikimedia pageviews) to help B2C founders choose which topics, courses or languages/markets to invest in next. Produces trend numbers with a reliability rating, a chart, and a one-page PDF report. Use for questions like "is interest in X growing in Ukrainian?", "compare X in Polish vs Czech", "which language audiences should we explore next?".
+license: MIT
+compatibility: Requires Python 3.9+, bash and network access to wikimedia.org; the launcher installs requests, numpy and matplotlib into a local .venv on first run.
 ---
 
 # Wiki Interest
 
-All data work is done by the CLI `scripts/wi`. Run it from this skill's root directory
-(it creates its own Python venv on first run). **Never compute statistics yourself — run the tool and quote
-its numbers.**
+All data work is done by the CLI `scripts/wi`. Run it from this skill's root directory, or by its
+full path `<skill dir>/scripts/wi` from anywhere (it creates its own Python venv on first run and resolves
+`runs/...` against the skill root). **Never compute statistics yourself — run the tool and quote its numbers.**
 
 ## Hard rules (check your answer against them before sending)
 
@@ -82,6 +84,8 @@ its numbers.**
    `verdicts`, ending with a recommendation
    (what to explore next and why). Hard rules apply. Proxy and low-reliability caveats are added
    to the PDF automatically. Use `@file.txt` for long text. Give the user the PDF path.
+   The output says what fitted on the page: with more than 10 series the PDF shows the 10 with the largest
+   share change (`note`); a conclusion that did not fit is cut (`conclusion_truncated`, follow the `hint`).
 
 6. **Follow-up questions** (other languages, longer period, another topic, different assumptions):
    just rerun `analyze` with changed arguments — downloads are cached, so it is fast.
@@ -95,7 +99,7 @@ its numbers.**
 |---|---|
 | `change %` | mean views of last 12 months vs previous 12 (same calendar months, so seasonality cancels), spikes removed. **Headline number.** |
 | `rel. change %` | same, for the article's share of all views of that language edition. Use it to compare languages: it removes "the whole Wikipedia got more/less traffic". If `change` and `rel. change` disagree, say so. |
-| `trend/yr %`, `p` | robust (Theil–Sen) annualised trend and Mann–Kendall p-value. p < 0.05 = statistically clear trend. |
+| `trend/yr %`, `p` | robust (Theil–Sen) annualised trend and Mann–Kendall p-value (`<0.001` = very strong). p < 0.05 = statistically clear trend. |
 | `months up` | how many of the last 12 months beat the same month a year earlier (12/12 = very consistent). |
 | `median/mo` | typical monthly views = audience size signal. < 300: percentages are noise. |
 | `reliability` | score 0–10 → high / medium / low. Low volume caps it: `low (8/10, volume cap)` means the trend itself is clean but there are too few views to trust percentages. Reasons are in `details[].reasons`. |

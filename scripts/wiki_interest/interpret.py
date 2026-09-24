@@ -84,6 +84,23 @@ def _pct_txt(x) -> str:
     return "—" if x is None else f"{x:+.1f}%"
 
 
+def _p_txt(p) -> str:
+    """Mann-Kendall p for the table: '0.0' read as an exact zero, so tiny values become '<0.001'."""
+    if p is None:
+        return "—"
+    return "<0.001" if p < 0.001 else f"{p:.3f}"
+
+
+def rank_key(s: dict) -> float:
+    """Sort order of the table and the PDF: share change first (edition-wide traffic removed),
+    raw change when no edition total was available. Series without a number go last."""
+    st = s["stats"]
+    x = st.get("growth_share_pct")
+    if x is None:
+        x = st.get("growth_pct")
+    return -1e9 if x is None else x
+
+
 def proxy_label(s: dict) -> str | None:
     if not s.get("proxy"):
         return None
@@ -198,11 +215,11 @@ def _reliability_cell(st: dict) -> str:
 def table_md(series: list[dict]) -> str:
     head = "| series | article | median/mo | change % | rel. change % | trend/yr % | p | months up | reliability | direction |"
     rows = [head, "|" + "---|" * 10]
-    for s in sorted(series, key=lambda s: -(s["stats"].get("growth_share_pct") or s["stats"].get("growth_pct") or -1e9)):
+    for s in sorted(series, key=rank_key, reverse=True):
         st = s["stats"]
         title = s["title"] + (" [proxy]" if s.get("proxy") else "")
         rows.append(f"| {s['topic']} · {s['lang']} | {title} | {st.get('median_monthly')} | {st.get('growth_pct')} | "
-                    f"{st.get('growth_share_pct')} | {st.get('trend_annual_pct')} | {st.get('trend_p_value')} | "
+                    f"{st.get('growth_share_pct')} | {st.get('trend_annual_pct')} | {_p_txt(st.get('trend_p_value'))} | "
                     f"{st.get('months_up_yoy')}/12 | {_reliability_cell(st)} | {st.get('direction')} |")
     return "\n".join(rows)
 
