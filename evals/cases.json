@@ -15,7 +15,7 @@
     "(надійн|reliab)",
     "(польськ|pl\\b|polish)",
     "(плат|willingness to pay)",
-    "(proxy|інш\\w* понят|не те саме|different concept|немає [^.]*статт|no [^.]*article)"
+    "(proxy|інш\\w* понят|не те саме|different concept|немає [^.]*статт|статт\\w* немає|no [^.]*article)"
    ],
    "answer_not": [
     "(<ЗАПОВНИ|<FILL)"
@@ -81,7 +81,7 @@
    "answer": [
     "(sk|словац)",
     "(плат|willingness to pay)",
-    "(proxy|інш\\w* понят|не те саме|different concept|немає [^.]*статт|no [^.]*article)"
+    "(proxy|інш\\w* понят|не те саме|different concept|немає [^.]*статт|статт\\w* немає|no [^.]*article)"
    ],
    "answer_not": [
     "(<ЗАПОВНИ|<FILL)"

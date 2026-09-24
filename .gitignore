@@ -1,7 +1,6 @@
 .venv/
 .cache/
 runs/
-evals/transcripts/
 __pycache__/
 *.pyc
 .idea/
