@@ -12,7 +12,6 @@ import json
 import os
 import time
 import warnings
-from pathlib import Path
 
 # macOS system Python links LibreSSL; urllib3 v2 warns about it on every run.
 # Harmless for HTTPS GETs, but it pollutes the agent's context, so silence it.
@@ -20,8 +19,9 @@ warnings.filterwarnings("ignore", message=".*OpenSSL.*")
 
 import requests  # noqa: E402
 
-from .paths import SKILL_DIR  # noqa: E402
-CACHE_DIR = Path(os.environ.get("WIKI_INTEREST_CACHE", SKILL_DIR / ".cache"))
+from .paths import DIRS  # noqa: E402
+
+CACHE_DIR = DIRS["cache"]
 
 # Wikimedia wants a User-Agent with contact info (URL or email): without it the quota is
 # 10 requests/minute instead of 200, and a 15-language run takes minutes. The project URL is

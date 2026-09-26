@@ -12,9 +12,9 @@ import re
 from pathlib import Path
 
 from . import charts, interpret, stats, wiki
-from .http import SKILL_DIR
+from .paths import DIRS
 
-RUNS_DIR = SKILL_DIR / "runs"
+RUNS_DIR = DIRS["runs"]
 PAGEVIEWS_START = wiki.PAGEVIEWS_START
 
 

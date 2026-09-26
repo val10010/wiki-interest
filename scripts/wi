@@ -1,23 +1,34 @@
 #!/usr/bin/env bash
-# Launcher: creates .venv in the skill root on first use, then runs the CLI.
+# Launcher: creates .venv on first use, then runs the CLI. The venv lives in the skill root if it is
+# writable, else in ${XDG_DATA_HOME:-~/.local/share}/wiki-interest; WIKI_INTEREST_HOME overrides both.
+# Python applies the same rule to runs/ and the cache (scripts/wiki_interest/paths.py).
 # Works from any directory. The CLI resolves @file / --out / RUN_DIR against the caller's directory
 # (WIKI_INTEREST_CALLER_CWD), RUN_DIR also against the skill root, so runs/... works from anywhere.
 set -euo pipefail
 SCRIPTS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(dirname "$SCRIPTS")"
 PY="${WIKI_INTEREST_PYTHON:-python3}"
+if [ -n "${WIKI_INTEREST_HOME:-}" ]; then
+  DATA="$WIKI_INTEREST_HOME"
+elif [ -w "$ROOT" ]; then
+  DATA="$ROOT"
+else
+  DATA="${XDG_DATA_HOME:-$HOME/.local/share}/wiki-interest"
+fi
+mkdir -p "$DATA"
+VENV="$DATA/.venv"
 # The marker is written only after a successful install, so an interrupted first run
 # (e.g. network loss during pip) is repaired on the next call instead of failing forever.
-MARKER="$ROOT/.venv/.wi-installed"
+MARKER="$VENV/.wi-installed"
 if [ ! -f "$MARKER" ] || [ "$ROOT/requirements.txt" -nt "$MARKER" ]; then
-  if [ ! -x "$ROOT/.venv/bin/python" ]; then
+  if [ ! -x "$VENV/bin/python" ]; then
     "$PY" -c 'import sys; sys.exit(sys.version_info < (3, 9))' 2>/dev/null || {
       echo '{"error": "Python >= 3.9 required", "hint": "set WIKI_INTEREST_PYTHON=/path/to/python3.9+"}'
       exit 1
     }
-    "$PY" -m venv "$ROOT/.venv" >&2
+    "$PY" -m venv "$VENV" >&2
   fi
-  "$ROOT/.venv/bin/pip" install -q --disable-pip-version-check -r "$ROOT/requirements.txt" >&2 || {
+  "$VENV/bin/pip" install -q --disable-pip-version-check -r "$ROOT/requirements.txt" >&2 || {
     echo '{"error": "installing dependencies failed", "hint": "check network access and rerun the same command"}'
     exit 1
   }
@@ -25,4 +36,4 @@ if [ ! -f "$MARKER" ] || [ "$ROOT/requirements.txt" -nt "$MARKER" ]; then
 fi
 export WIKI_INTEREST_CALLER_CWD="$PWD"
 cd "$ROOT"
-PYTHONPATH="$SCRIPTS${PYTHONPATH:+:$PYTHONPATH}" exec "$ROOT/.venv/bin/python" -m wiki_interest "$@"
+PYTHONPATH="$SCRIPTS${PYTHONPATH:+:$PYTHONPATH}" exec "$VENV/bin/python" -m wiki_interest "$@"
