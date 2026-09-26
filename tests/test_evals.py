@@ -108,4 +108,5 @@ def test_limits_line_check_does_not_match_platform():
     for p in patterns:
         assert not re.search(p, "міграція на інші платформи; платна версія", re.I)
         assert re.search(p, "сигнал цікавості, а не готовності платити", re.I)
+        assert re.search(p, "сигнал цікавості, не готовність платити", re.I)
         assert re.search(p, "curiosity, not willingness to pay", re.I)
