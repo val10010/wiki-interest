@@ -10,6 +10,7 @@ from pathlib import Path
 
 from . import stats
 
+TRENDS = ("growing", "declining")
 CMD = "scripts/wi"  # how the agent invokes the skill, relative to the skill root
 
 GLOBAL_CAVEATS = {
@@ -38,6 +39,14 @@ VERDICT = {
            "gap": " Дані лише з {m} (стаття створена або перейменована тоді): статистику пораховано за {n} міс., "
                   "без порівняння з тими самими місяцями рік тому.",
            "renamed": " Статтю перейменовано: до {m} враховано перегляди старої назви (редиректу), ряд безперервний.",
+           "views_dir": {"growing": "перегляди ростуть", "declining": "перегляди падають",
+                         "flat": "перегляди майже не змінились (±10%)", "unclear": "перегляди без підтвердженого тренду"},
+           "share_dir": {"growing": "відносний інтерес (частка в трафіку розділу) зростає",
+                         "declining": "відносний інтерес (частка в трафіку розділу) знижується",
+                         "flat": "відносний інтерес (частка в трафіку розділу) стабільний (±10%)",
+                         "unclear": "відносний інтерес (частка в трафіку розділу) без підтвердженого тренду"},
+           "with_edition": "{views} разом із трафіком усього розділу, а {share}", "but": "{views}, але {share}",
+           "share_moved": " Перегляди майже не змінились, але частка теми в розділі змінилась на {rel}.",
            "share_flat": " Частка теми майже не змінилась: зміна переглядів — це зміна трафіку всього розділу.",
            "share_up": " Перегляди падають, але частка теми в розділі зростає.",
            "share_down": " Перегляди ростуть, але частка теми в розділі падає.",
@@ -55,6 +64,15 @@ VERDICT = {
                   "without a same-months-last-year comparison.",
            "renamed": " The article was renamed: before {m} views of the old title (a redirect) are counted, "
                       "so the series is continuous.",
+           "views_dir": {"growing": "views are growing", "declining": "views are declining",
+                         "flat": "views barely moved (±10%)", "unclear": "views show no confirmed trend"},
+           "share_dir": {"growing": "relative interest (share of edition traffic) is growing",
+                         "declining": "relative interest (share of edition traffic) is declining",
+                         "flat": "relative interest (share of edition traffic) is stable (±10%)",
+                         "unclear": "relative interest (share of edition traffic) shows no confirmed trend"},
+           "with_edition": "{views} together with the whole edition's traffic, while {share}",
+           "but": "{views}, but {share}",
+           "share_moved": " Views barely moved, but the topic's share of the edition changed by {rel}.",
            "share_flat": " The topic's share barely moved: the change in views is edition-wide traffic.",
            "share_up": " Views fall, but the topic's share of the edition grows.",
            "share_down": " Views grow, but the topic's share of the edition falls.",
@@ -175,20 +193,38 @@ def _cap_txt(st: dict, v: dict) -> str:
     return v["cap_fmt"].format(k=v["and"].join(v["cap"][k] for k in kinds))
 
 
+def _direction_txt(st: dict, v: dict) -> tuple[str, bool]:
+    """Opening words of a verdict. Raw views alone say "interest is falling" when the whole edition
+    lost traffic; when the share of edition traffic disagrees, both are named instead. Returns
+    (text, whether the share was already explained)."""
+    d, ds = st.get("direction", "no data"), st.get("direction_share")
+    g, rel = st.get("growth_pct"), st.get("growth_share_pct")
+    if ds is None or ds == d or d == "no data":
+        return v[d], False
+    moved = g is not None and rel is not None and abs(g) < 10 <= abs(rel)
+    if not (d in TRENDS or ds in TRENDS or moved):
+        return v[d], False
+    joint = v["with_edition"] if d in TRENDS and ds == "flat" else v["but"]
+    return joint.format(views=v["views_dir"][d], share=v["share_dir"][ds]), True
+
+
 def verdict(s: dict, ui: str) -> str:
     """One quotable sentence per series, so the model never has to phrase the
     direction, the numbers or the caveats itself (weak models get these wrong)."""
     v, st = VERDICT[ui], s["stats"]
     g, rel = st.get("growth_pct"), st.get("growth_share_pct")
+    opening, share_told = _direction_txt(st, v)
     text = f"{s['lang']} · «{s['title']}»: " + v["body"].format(
-        dir=v[st.get("direction", "no data")], g=_pct_txt(g), rel=_pct_txt(rel),
+        dir=opening, g=_pct_txt(g), rel=_pct_txt(rel),
         t=_pct_txt(st.get("trend_annual_pct")), med=st.get("median_monthly"),
         level=v["level"].get(st.get("reliability"), "—"), cap=_cap_txt(st, v))
-    if g is not None and rel is not None and abs(g) >= 10:
-        if abs(rel) < 10:
+    if g is not None and rel is not None and not share_told:
+        if abs(g) >= 10 and abs(rel) < 10:
             text += v["share_flat"]
-        elif (g < 0) != (rel < 0):
+        elif abs(g) >= 10 and (g < 0) != (rel < 0):
             text += v["share_up"] if g < 0 else v["share_down"]
+        elif abs(g) < 10 <= abs(rel):
+            text += v["share_moved"].format(rel=_pct_txt(rel))
     if st.get("data_start"):
         text += v["gap"].format(m=st["data_start"], n=st.get("months"))
     elif (s.get("rename_fix") or {}).get("closed"):
@@ -253,14 +289,15 @@ def _months_up_txt(st: dict) -> str:
 
 
 def table_md(series: list[dict]) -> str:
-    head = "| series | article | median/mo | change % | rel. change % | trend/yr % | p | months up | reliability | direction |"
-    rows = [head, "|" + "---|" * 10]
+    head = ("| series | article | median/mo | change % | rel. change % | trend/yr % | p | months up | reliability "
+            "| direction | direction (share) |")
+    rows = [head, "|" + "---|" * 11]
     for s in sorted(series, key=rank_key, reverse=True):
         st = s["stats"]
         title = s["title"] + (" [proxy]" if s.get("proxy") else "")
         rows.append(f"| {s['topic']} · {s['lang']} | {title} | {st.get('median_monthly')} | {st.get('growth_pct')} | "
                     f"{st.get('growth_share_pct')} | {st.get('trend_annual_pct')} | {_p_txt(st.get('trend_p_value'))} | "
-                    f"{_months_up_txt(st)} | {_reliability_cell(st)} | {st.get('direction')} |")
+                    f"{_months_up_txt(st)} | {_reliability_cell(st)} | {st.get('direction')} | {st.get('direction_share') or '—'} |")
     return "\n".join(rows)
 
 

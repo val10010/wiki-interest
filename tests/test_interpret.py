@@ -77,3 +77,29 @@ def test_short_series_is_named_in_verdict_and_warning(series_with):
 def test_verdict_marks_excess_above_a_seasonal_peak(series_with):
     s = series_with(spikes=[{"month": "2025-09", "seasonal_excess": True}], seasonal_peaks=[{"month": "2025-09"}])
     assert "2025-09 (надлишок понад сезонний пік)" in interpret.verdict(s, "uk")
+
+
+def test_verdict_does_not_call_edition_wide_decline_a_loss_of_interest(series_with):
+    # evals/transcripts/haiku-4.5_2026-09-24/english_learning_report.md, vi: "інтерес знижується … надійність
+    # висока" at -23.1 % views but +2.4 % share of the edition.
+    vi = dict(series_with(direction="declining", growth_pct=-23.1, growth_share_pct=2.4, direction_share="flat",
+                          trend_annual_pct=-28.5, median_monthly=14568), lang="vi", title="Tiếng Anh")
+    uk = interpret.verdict(vi, "uk")
+    first = uk.split(": ", 1)[1]
+    assert not first.startswith("інтерес знижується")
+    assert first.startswith("перегляди падають разом із трафіком усього розділу")
+    assert "відносний інтерес (частка в трафіку розділу) стабільний" in first.split(".")[0]
+    assert "views are declining together with the whole edition" in interpret.verdict(vi, "en")
+
+
+def test_verdict_reports_share_change_when_views_are_flat(series_with):
+    s = series_with(direction="flat", growth_pct=-3.0, growth_share_pct=18.0, direction_share="growing")
+    first = interpret.verdict(s, "uk").split(": ", 1)[1].split(".")[0]
+    assert first.startswith("перегляди майже не змінились") and "частка в трафіку розділу) зростає" in first
+    s = series_with(direction="flat", growth_pct=-3.0, growth_share_pct=12.0, direction_share="unclear")
+    assert "без підтвердженого тренду" in interpret.verdict(s, "uk").split(".")[0]
+
+
+def test_table_has_both_directions(series_with):
+    t = interpret.table_md([series_with(direction="declining", direction_share="flat")])
+    assert "| direction | direction (share) |" in t.split("\n")[0] and "| declining | flat |" in t

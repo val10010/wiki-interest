@@ -131,3 +131,15 @@ def test_series_b_gets_no_consistency_points():
     s = stats.analyze_series(MONTHS, _outlier_on_seasonal_peak(), FLAT_WIKI)
     assert s["months_up_yoy"] == 1
     assert any("1/12" in r and "disagree" in r for r in s["reasons"])
+
+
+def test_direction_share_uses_the_share_series():
+    # Views fall 20 %/yr exactly with the whole edition: raw says "declining", the share is flat.
+    v = [int(20000 * 0.8 ** (k / 12)) for k in range(24)]
+    total = [int(1e8 * 0.8 ** (k / 12)) for k in range(24)]
+    s = stats.analyze_series(MONTHS, v, total)
+    assert s["direction"] == "declining" and s["direction_share"] == "flat"
+    # Views flat while the edition shrinks 25 %/yr: the share grows.
+    s = stats.analyze_series(MONTHS, [20000] * 24, [int(1e8 * 0.75 ** (k / 12)) for k in range(24)])
+    assert s["direction"] == "flat" and s["direction_share"] == "growing" and s["trend_share_p_value"] < 0.05
+    assert stats.analyze_series(MONTHS, [20000] * 24, None)["direction_share"] is None

@@ -196,12 +196,20 @@ def analyze_series(months: list[str], views: list[int], project_total: list[int]
     out["trend_p_value"] = round(mann_kendall_p(ly), 4)
 
     share = None
+    out["direction_share"] = None
     if project_total is not None and min(project_total) > 0:
         t = np.array(project_total, dtype=float)
         share = clean / t * 1e6
         out["per_million_views_last12"] = round(float(share[-12:].mean()), 2)
         out["growth_share_pct"] = window_growth(share)["growth_pct"]
         out["project_growth_pct"] = window_growth(t)["growth_pct"]
+        # Same direction rule on the share of edition traffic: separates "less interest" from
+        # "the whole edition lost traffic" (e.g. to AI answers in search).
+        ls = ly - np.log(t)
+        out["trend_share_annual_pct"] = round((math.exp(theil_sen(ls) * 12) - 1) * 100, 1)
+        out["trend_share_p_value"] = round(mann_kendall_p(ls), 4)
+        out["direction_share"] = direction(out["growth_share_pct"], out["trend_share_annual_pct"],
+                                           out["trend_share_p_value"])
 
     # ---------------------------------------------------------- reliability
     score, reasons = 0, []

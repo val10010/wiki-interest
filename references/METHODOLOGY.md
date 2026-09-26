@@ -43,6 +43,8 @@ A series that starts inside the period (see step 0) → at most medium, low with
 
 **Direction:** `growing` if clean growth ≥ +10 %, trend > 0 and p < 0.05 (calibrated, see below; p < 0.2 was used before). `declining` is the mirror case. `flat` if |growth| < 10 %. Otherwise `unclear`. The table prints p with three decimals and `<0.001` below that.
 
+**Direction of the share (`direction_share`):** the same rule applied to the article's share of the edition's traffic: `growth_share_pct`, and Theil–Sen + Mann–Kendall on log(clean views + 1) − log(edition views) (`trend_share_annual_pct`, `trend_share_p_value`). `null` without edition totals. `direction` (raw views) is kept for compatibility; the table shows both columns. In the real English-learning run, 4 of 5 languages were "declining" in views while their share was flat (vi: −23.1 % views, +2.4 % share), i.e. whole editions lost traffic, not the topic.
+
 ## PDF report
 
 One A4 page rendered with matplotlib. The table and the charts show at most 10 series, chosen and ordered like the markdown table (share change, then raw change); with more series the page says how many are shown and the `report` command returns `series_shown` / `series_total`. The agent's conclusion is wrapped at 8.6 pt; if it does not fit in 9 lines the font shrinks to 7.8 and then 7 pt (13 lines); beyond that it is cut with an ellipsis and the command returns `conclusion_truncated: true` with a hint. The method paragraph always fits; caveats fill the remaining lines in priority order (proxy, low reliability, user caveats, then the general ones) and the count of shown ones is returned. Titles in scripts that no installed font can draw (CJK, Thai, Indic on a bare Linux box) are replaced by the English label of the concept, with a note under the table.
@@ -56,7 +58,7 @@ One A4 page rendered with matplotlib. The table and the charts show at most 10 s
 
 ## Verdicts
 
-For each series the tool writes one sentence (`verdicts`, in the report language): direction, change, share change, trend, volume, reliability with cap, seasonal peaks, excluded spikes, and the proxy flag. The direction wording comes straight from `direction`. If views moved ≥ 10 % but the share of the edition moved < 10 %, the verdict says the change is edition-wide traffic. The agent quotes verdicts instead of phrasing conclusions, because in a Haiku 4.5 run the model called a `flat` series "growing" and merged numbers from different columns.
+For each series the tool writes one sentence (`verdicts`, in the report language): direction, change, share change, trend, volume, reliability with cap, seasonal peaks, excluded spikes, and the proxy flag. The opening words come from `direction` when `direction_share` agrees. When they disagree and either is `growing`/`declining` (or views moved < 10 % but the share ≥ 10 %), the verdict opens with both instead of "interest is growing/declining": "views are declining together with the whole edition's traffic, while relative interest (share of edition traffic) is stable", or "views barely moved, but relative interest … is growing". Without `direction_share` (old runs) a shorter note after the numbers says the same. The agent quotes verdicts instead of phrasing conclusions, because in a Haiku 4.5 run the model called a `flat` series "growing" and merged numbers from different columns.
 
 
 ## Calibration (`evals/calibrate_stats.py`)
