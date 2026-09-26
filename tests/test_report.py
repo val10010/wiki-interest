@@ -54,3 +54,10 @@ def test_unrenderable_title_falls_back_to_english_label(tmp_path, monkeypatch):
 def test_font_fallback_list_starts_with_bundled_font():
     assert charts.font_families()[0] == "DejaVu Sans"
     assert charts.renderable("Język angielski · Английский · İngilizce")
+
+
+def test_method_text_names_all_six_reliability_components():
+    # Review: the PDF and METHODOLOGY named five components; the code also scores >= 24 months of data.
+    for ui in ("uk", "en"):
+        txt = charts.L[ui]["method_txt"]
+        assert "24" in txt and ("шести" in txt or "six" in txt)

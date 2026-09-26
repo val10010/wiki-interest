@@ -25,7 +25,7 @@
 2. **Growth (headline).** Mean of the last 12 months vs the previous 12 months on the clean series. Same calendar months are compared, so seasonality (January diets, September school start) cancels. With < 24 months the halves are compared and a caveat is added.
 3. **Relative growth.** The same comparison on `share`.
 4. **Trend.** Theil–Sen slope of log(views), annualised. Robust to outliers.
-5. **Significance.** Mann–Kendall test on log(clean views). Note: monthly series are autocorrelated, which makes p-values somewhat optimistic. That is why p is only one of five reliability components.
+5. **Significance.** Mann–Kendall test on log(clean views). Note: monthly series are autocorrelated, which makes p-values somewhat optimistic. That is why p is only one of six reliability components.
 6. **Consistency.** Number of the last 12 months that beat the same month a year earlier.
 
 ## Reliability score (0–10)
