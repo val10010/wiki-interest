@@ -31,9 +31,10 @@ OPENROUTER_API_KEY=… .venv/bin/python evals/run_agent.py --repeat 5  # pass ra
 ```
 
 `scripts/wi` always `cd`s to the root and sets `PYTHONPATH=scripts`; it exports the caller's directory as
-`WIKI_INTEREST_CALLER_CWD`, and `paths.py` resolves `@file` / `--out` against it and `RUN_DIR` against it, then the
-root, then the runs dir. Suggested commands (`next`, warnings) use `interpret.launcher()`: `scripts/wi` from the root,
-the absolute launcher path elsewhere. Data dirs (`paths.data_dirs`, same rule in `scripts/wi` for the venv): the root
+`WIKI_INTEREST_CALLER_CWD`, and `paths.py` resolves `@file` / `--out` against it; a `RUN_DIR` written as `runs/<name>`
+is looked up in the configured runs dir first, any other relative one against the caller, then the root, then the runs
+dir. Suggested commands (`next`, warnings) use `interpret.launcher()`: `scripts/wi` from the root, the absolute launcher
+path elsewhere. Data dirs (`paths.data_dirs`, same rule in `scripts/wi` for the venv): the root
 if writable, else `${XDG_DATA_HOME:-~/.local/share}/wiki-interest` (venv, runs) and
 `${XDG_CACHE_HOME:-~/.cache}/wiki-interest` (cache). Env vars: `WIKI_INTEREST_HOME` (venv + runs + `.cache`),
 `WIKI_INTEREST_RUNS`, `WIKI_INTEREST_CACHE`, `WIKI_INTEREST_OFFLINE=1` (cache only), `WIKI_INTEREST_UA` (User-Agent),

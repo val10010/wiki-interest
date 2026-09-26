@@ -162,7 +162,8 @@ def main(argv=None):
     except FileNotFoundError as e:  # a path, not the topic or the network: say which path and how it was resolved
         _fail(f"file not found: {e.filename or e}",
               f"relative paths (@file, --out, RUN_DIR) are resolved against the directory the command was run "
-              f"from ({paths.caller_cwd()}); RUN_DIR also against the skill root and its runs directory. Use an "
+              f"from ({paths.caller_cwd()}), RUN_DIR also against the skill root and by name in the runs directory "
+              f"({pipeline.RUNS_DIR}; a `runs/<name>` path is looked up there first). Use an "
               f"absolute path; `{interpret.launcher()} runs` lists the run directories.")
     except Exception as e:  # clear one-line error for the agent instead of a traceback
         _fail(f"{type(e).__name__}: {e}", "check spelling of language codes / topic, network access, or retry")

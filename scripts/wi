@@ -3,7 +3,8 @@
 # writable, else in ${XDG_DATA_HOME:-~/.local/share}/wiki-interest; WIKI_INTEREST_HOME overrides both.
 # Python applies the same rule to runs/ and the cache (scripts/wiki_interest/paths.py).
 # Works from any directory. The CLI resolves @file / --out / RUN_DIR against the caller's directory
-# (WIKI_INTEREST_CALLER_CWD), RUN_DIR also against the skill root, so runs/... works from anywhere.
+# (WIKI_INTEREST_CALLER_CWD); a RUN_DIR written as runs/<name> is looked up in the runs directory first, then
+# from the caller's directory and the skill root, so the printed runs/... works from anywhere.
 set -euo pipefail
 SCRIPTS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(dirname "$SCRIPTS")"

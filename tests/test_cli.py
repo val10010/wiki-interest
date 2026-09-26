@@ -251,3 +251,24 @@ def test_run_dir_is_found_from_the_caller_then_from_the_skill_root(analyze, caps
     monkeypatch.setenv("WIKI_INTEREST_CALLER_CWD", str(tmp_path))
     cli.main(["show", f"runs/{run.name}"])                               # runs/... still works from anywhere
     assert json.loads(capsys.readouterr().out)["run_dir"] == str(run)
+
+
+def test_runs_prefix_is_looked_up_in_the_configured_runs_dir_first(analyze, capsys, monkeypatch, tmp_path):
+    # evals/run_agent.py gives each case its own WIKI_INTEREST_RUNS. `report runs/<name>` looked in the caller's
+    # directory and the skill root first, so a stale runs/<name> there won and got the PDF: the isolation was gone.
+    from wiki_interest import paths
+    run = Path(analyze("--langs", "pl")["run_dir"])                      # lives in the configured runs dir
+    root, cwd = tmp_path / "skill", tmp_path / "cwd"
+    for stale in (root / "runs" / run.name, cwd / "runs" / run.name):
+        stale.mkdir(parents=True)
+        (stale / "analysis.json").write_text((run / "analysis.json").read_text())
+    monkeypatch.setattr(paths, "SKILL_DIR", root)
+    monkeypatch.setenv("WIKI_INTEREST_CALLER_CWD", str(cwd))
+    cli.main(["show", f"runs/{run.name}"])
+    assert json.loads(capsys.readouterr().out)["run_dir"] == str(run)
+    cli.main(["report", f"runs/{run.name}", "--conclusion", "x"])
+    assert Path(json.loads(capsys.readouterr().out)["pdf"]) == run / "report.pdf"
+    (cwd / "runs" / "only-here").mkdir()
+    (cwd / "runs" / "only-here" / "analysis.json").write_text("{}")
+    assert paths.find_run("runs/only-here", run.parent) == cwd / "runs" / "only-here"   # fallback still works
+    assert paths.find_run(f"other/{run.name}", run.parent) == run                        # by name, as before

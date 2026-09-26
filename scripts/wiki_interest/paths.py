@@ -49,11 +49,18 @@ def from_caller(p: str | Path) -> Path:
 
 
 def find_run(spec: str, runs_dir: Path) -> Path:
-    """A run directory given by the agent: as given (relative to the caller), then relative to the skill
-    root (so the printed `runs/...` keeps working from anywhere), then by name inside runs_dir."""
+    """A run directory given by the agent. `runs/<name>` (what the tool prints) is looked up in the configured
+    runs directory first: with WIKI_INTEREST_RUNS set (evals give each case its own), a stale runs/<name> in the
+    caller's directory or the skill root must not win. Then as given (relative to the caller), relative to the
+    skill root, and by name inside runs_dir."""
     p = Path(spec).expanduser()
-    tried = [p] if p.is_absolute() else [caller_cwd() / p, SKILL_DIR / p, runs_dir / p.name]
+    if p.is_absolute():
+        tried = [p]
+    else:
+        tried = [caller_cwd() / p, SKILL_DIR / p, runs_dir / p.name]
+        if p.parts[:1] == ("runs",) and len(p.parts) > 1:
+            tried.insert(0, runs_dir.joinpath(*p.parts[1:]))
     for c in tried:
         if (c / "analysis.json").is_file():
             return c
-    raise FileNotFoundError(errno.ENOENT, "no analysis.json", " or ".join(str(c) for c in tried))
+    raise FileNotFoundError(errno.ENOENT, "no analysis.json", " or ".join(dict.fromkeys(str(c) for c in tried)))

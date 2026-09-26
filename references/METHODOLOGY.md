@@ -49,9 +49,11 @@ A series that starts inside the period (see step 0) → at most medium, low with
 ## Paths
 
 `scripts/wi` changes to the skill root before starting Python, and passes the agent's directory in
-`WIKI_INTEREST_CALLER_CWD`. `--conclusion @file`, `--out` (analyze and report) are resolved against that directory;
-`RUN_DIR` first against it, then against the skill root, then by name in the runs directory, so the printed
-`runs/<name>` keeps working. A missing path is its own error with the full path(s) tried, not the generic
+`WIKI_INTEREST_CALLER_CWD`. `--conclusion @file`, `--out` (analyze and report) are resolved against that directory.
+`RUN_DIR` written as `runs/<name>` (the form the tool prints) is looked up in the configured runs directory first:
+with `WIKI_INTEREST_RUNS` set (the evals give each case its own), a stale `runs/<name>` in the caller's directory or
+the skill root must not win and receive the PDF. Any other relative `RUN_DIR` is tried against the caller's directory,
+then the skill root, then by name in the runs directory. A missing path is its own error with the full path(s) tried, not the generic
 "check spelling / network" hint. Suggested commands (`next`, commands inside `warnings`, usage hints) use `scripts/wi`
 when the agent is in the skill root and the launcher's absolute path otherwise: a relative `scripts/wi` would fail
 from any other directory, and an absolute path in every case would make answers and transcripts longer.
