@@ -251,6 +251,9 @@ def analyze_series(months: list[str], views: list[int], project_total: list[int]
         else:
             reasons.append(f"whole-wiki traffic moved {out['project_growth_pct']}%: "
                            f"relative interest ({out['growth_share_pct']}%) disagrees with raw views")
+    elif share is None:
+        reasons.append("no edition-wide total views for every month: normalisation (share of edition traffic) "
+                       "not computed, so its agreement point is not given")
     if n >= 24:
         score += 1
 

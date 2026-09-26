@@ -143,3 +143,10 @@ def test_direction_share_uses_the_share_series():
     s = stats.analyze_series(MONTHS, [20000] * 24, [int(1e8 * 0.75 ** (k / 12)) for k in range(24)])
     assert s["direction"] == "flat" and s["direction_share"] == "growing" and s["trend_share_p_value"] < 0.05
     assert stats.analyze_series(MONTHS, [20000] * 24, None)["direction_share"] is None
+
+
+def test_missing_edition_total_explains_the_lost_point():
+    v = [int(5000 * 1.5 ** (k / 12)) for k in range(24)]
+    for total in (None, [10**8] * 23 + [0]):
+        s = stats.analyze_series(MONTHS, v, total)
+        assert any("edition" in r and "normalis" in r for r in s["reasons"])

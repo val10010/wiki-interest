@@ -35,7 +35,7 @@
 | trend significance: p < 0.05 → 2, p < 0.2 → 1 | 0–2 |
 | consistency, in the direction of the change: growth ≥ 0 → ≥ 9 of 12 months up → 2, 7–8 → 1; growth < 0 → ≤ 3 → 2, 4–5 → 1; months that contradict the sign of the change → 0 and a reason | 0–2 |
 | spike robustness: spikes < 25 % of views and raw vs clean growth have the same sign | 0–2 |
-| normalisation agrees with raw growth direction | 0–1 |
+| normalisation agrees with raw growth direction (no edition total for some month → 0 and a reason) | 0–1 |
 | ≥ 24 months of data | 0–1 |
 
 ≥ 8 → high, 5–7 → medium, else low. **Caps:** median < 300 views/mo → always low. Median < 3000 → at most medium.
