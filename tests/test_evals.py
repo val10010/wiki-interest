@@ -39,7 +39,7 @@ CASE = {"id": "x", "turns": ["Порівняй pl і cs"], "checks": {
 
 
 def test_run_case_runs_tools_until_a_final_answer_and_scores_it(monkeypatch):
-    monkeypatch.setattr(run_agent, "bash", lambda cmd: '{"verdicts": ["pl: +40%"]}')
+    monkeypatch.setattr(run_agent, "bash", lambda cmd, runs_dir=None: '{"verdicts": ["pl: +40%"]}')
     client = _Client([_Msg(command='scripts/wi analyze --topic "Intermittent fasting" --langs pl,cs'),
                       _Msg(content="pl росте на +40%.")])
     res = run_agent.run_case(client, "fake/model", CASE)
@@ -48,7 +48,7 @@ def test_run_case_runs_tools_until_a_final_answer_and_scores_it(monkeypatch):
 
 
 def test_run_case_reports_each_failed_check(monkeypatch):
-    monkeypatch.setattr(run_agent, "bash", lambda cmd: "")
+    monkeypatch.setattr(run_agent, "bash", lambda cmd, runs_dir=None: "")
     res = run_agent.run_case(_Client([_Msg(content="<FILL: …> без цифр")]), "fake/model", CASE)
     assert not res["passed"]
     assert [k for k, ok in res["checks"].items() if not ok] == ["cmd:analyze", "cmd:--langs[= ]\\S*pl", "answer:%",
@@ -59,3 +59,40 @@ def test_transcripts_are_anonymized():
     raw = json.dumps({"run_dir": f"{run_agent.SKILL}/runs/x", "home": f"{Path.home()}/y"})
     clean = run_agent.anonymize(raw)
     assert str(Path.home()) not in clean and "<skill>/runs/x" in clean
+
+
+# ------------------------------------------------------------------ isolation, repeats, output limit (iteration 7)
+REPORT_CASE = {"id": "r", "turns": ["звіт"], "checks": {"commands": ["report"], "files": ["runs/*/report.pdf"]}}
+
+
+def test_each_case_gets_its_own_runs_dir(monkeypatch, tmp_path):
+    # A PDF left by an earlier run in the skill's runs/ used to satisfy `files: runs/*/report.pdf`.
+    (tmp_path / "runs" / "old").mkdir(parents=True)
+    (tmp_path / "runs" / "old" / "report.pdf").write_bytes(b"%PDF")
+    monkeypatch.setattr(run_agent, "SKILL", tmp_path)
+    seen = []
+
+    def fake_bash(cmd, runs_dir=None):
+        seen.append(runs_dir)
+        if "report" in cmd:
+            (Path(runs_dir) / "new").mkdir()
+            (Path(runs_dir) / "new" / "report.pdf").write_bytes(b"%PDF")
+        return "{}"
+    monkeypatch.setattr(run_agent, "bash", fake_bash)
+    res = run_agent.run_case(_Client([_Msg(content="нічого не запускав")]), "fake/model", REPORT_CASE)
+    assert not res["checks"]["file:runs/*/report.pdf"]                  # the stale PDF does not count
+    res = run_agent.run_case(_Client([_Msg(command="scripts/wi report runs/x --conclusion c"), _Msg(content="ok")]),
+                             "fake/model", REPORT_CASE)
+    assert res["checks"]["file:runs/*/report.pdf"] and seen[0] and Path(seen[0]) != tmp_path / "runs"
+    assert not Path(seen[0]).exists()                                     # removed after scoring
+
+
+def test_pass_rates_over_repeats():
+    results = [{"id": "a", "passed": ok, "checks": {"cmd:x": True, "answer:y": ok}} for ok in (True, False, True)]
+    assert run_agent.pass_rates(results) == {"a": {"passed": "2/3", "checks": {"cmd:x": "3/3", "answer:y": "2/3"}}}
+
+
+def test_tool_output_is_cut_like_claude_code():
+    assert run_agent.TOOL_OUTPUT_LIMIT == 30000
+    out = run_agent.bash("printf '%040000d' 0")
+    assert len(out) < 30100 and out.endswith("[truncated]")
