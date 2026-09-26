@@ -42,6 +42,7 @@ VERDICT = {
            "share_up": " Перегляди падають, але частка теми в розділі зростає.",
            "share_down": " Перегляди ростуть, але частка теми в розділі падає.",
            "seasonal": " Сезонні піки (залишено): {m}.", "spikes": " Аномальні сплески (виключено): {m}.",
+           "excess": " (надлишок понад сезонний пік)",
            "proxy": " PROXY: стаття про «{label}», а не про саму тему — інше поняття."},
     "en": {"growing": "interest is growing", "declining": "interest is declining",
            "flat": "interest is flat (change within ±10%)", "unclear": "the data does not confirm a trend",
@@ -58,6 +59,7 @@ VERDICT = {
            "share_up": " Views fall, but the topic's share of the edition grows.",
            "share_down": " Views grow, but the topic's share of the edition falls.",
            "seasonal": " Seasonal peaks (kept): {m}.", "spikes": " Anomalous spikes (excluded): {m}.",
+           "excess": " (excess above the seasonal peak)",
            "proxy": " PROXY: article about '{label}', not the topic itself — a different concept."},
 }
 
@@ -194,7 +196,8 @@ def verdict(s: dict, ui: str) -> str:
     if st.get("seasonal_peaks"):
         text += v["seasonal"].format(m=", ".join(p["month"] for p in st["seasonal_peaks"]))
     if st.get("spikes"):
-        text += v["spikes"].format(m=", ".join(p["month"] for p in st["spikes"]))
+        text += v["spikes"].format(m=", ".join(p["month"] + (v["excess"] if p.get("seasonal_excess") else "")
+                                               for p in st["spikes"]))
     if s.get("proxy"):
         text += v["proxy"].format(label=proxy_label(s))
     return text

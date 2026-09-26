@@ -72,3 +72,8 @@ def test_short_series_is_named_in_verdict_and_warning(series_with):
     w = " ".join(interpret.build_warnings([{"topic": "t", "missing_languages": []}], [s]))
     assert "2024-05" in w and '--article "pl:T" --article "pl:<old title>"' in w
     assert "(обмежено неповним рядом)" in interpret.verdict(s, "uk")                       # cap reason is not "low volume"
+
+
+def test_verdict_marks_excess_above_a_seasonal_peak(series_with):
+    s = series_with(spikes=[{"month": "2025-09", "seasonal_excess": True}], seasonal_peaks=[{"month": "2025-09"}])
+    assert "2025-09 (надлишок понад сезонний пік)" in interpret.verdict(s, "uk")

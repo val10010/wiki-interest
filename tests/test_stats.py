@@ -100,3 +100,19 @@ def test_short_remainder_after_a_gap_is_capped_at_low():
     v = [0] * 14 + [int(5000 * 1.5 ** (k / 12)) for k in range(10)]  # a clean trend, but only 10 real months
     s = stats.analyze_series(MONTHS, v, FLAT_WIKI)
     assert s["reliability"] == "low" and s["cap_kinds"] == ["gap"] and "since" in s["reliability_cap"]
+
+
+def _outlier_on_seasonal_peak():
+    """Review repro, series B: 11 of 12 months -5 %, September 1.8x a year ago and 6x now."""
+    v = np.full(24, 10000.0)
+    v[12:] *= .95
+    v[8], v[20] = 18000, 60000
+    return [int(x) for x in v]
+
+
+def test_outlier_on_top_of_a_seasonal_peak_is_cut_to_the_seasonal_level():
+    s = stats.analyze_series(MONTHS, _outlier_on_seasonal_peak(), FLAT_WIKI)
+    assert abs(s["growth_pct"]) < 10
+    excess = [x for x in s["spikes"] if x.get("seasonal_excess")]
+    assert [x["month"] for x in excess] == [MONTHS[20]] and excess[0]["kept"] < 35000
+    assert MONTHS[20] in [p["month"] for p in s["seasonal_peaks"]]   # the seasonal part is still a peak

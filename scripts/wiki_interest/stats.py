@@ -12,6 +12,7 @@ import numpy as np
 SPIKE_Z = 3.5          # robust z-score threshold for anomalous months
 SPIKE_RATIO = 1.8      # ... and at least this many times the local median
 SEASONAL_RATIO = 1.5   # same month a year apart this elevated -> seasonal peak, not anomaly
+SEASONAL_TOLERANCE = 1.75  # a seasonal peak is kept up to this x the paired peak's ratio; the rest is an anomaly
 LOW_VOLUME = 3000      # median monthly views below this -> "low volume"
 VERY_LOW_VOLUME = 300
 TREND_P = 0.05        # growing/declining needs a significant trend; 0.2 gave ~11 % false "growing" (calibration)
@@ -66,20 +67,28 @@ def detect_spikes(v: np.ndarray, window: int = 5) -> tuple[np.ndarray, np.ndarra
     return mask, np.expm1(base)
 
 
-def split_seasonal(v: np.ndarray, mask: np.ndarray, base: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """Split detected spikes into (anomalies, seasonal peaks).
+def split_seasonal(v: np.ndarray, mask: np.ndarray, base: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Split detected spikes into (anomalies, seasonal peaks, upper limit per month).
 
     A spike whose calendar month is also elevated (>= SEASONAL_RATIO x its own
     baseline) one year earlier or later is a recurring seasonal peak (school
-    start, New-year diets), not an anomaly. Seasonal peaks are kept in the data:
-    the year-over-year comparison already cancels them.
+    start, New-year diets), not an anomaly. Only its seasonal part is kept: the
+    value is limited to SEASONAL_TOLERANCE x the paired peak's ratio to its
+    baseline, and the excess above that is an anomaly (a 6x viral month on top of
+    a 1.8x school-start peak would otherwise pass as "seasonal" and inflate growth).
+    Months without a limit get +inf.
     """
     n = len(v)
-    elevated = v >= SEASONAL_RATIO * np.maximum(base, 1)
+    ratio = v / np.maximum(base, 1)
+    elevated = ratio >= SEASONAL_RATIO
     seasonal = np.zeros(n, dtype=bool)
+    limit = np.full(n, np.inf)
     for k in np.where(mask)[0]:
-        seasonal[k] = any(0 <= j < n and elevated[j] for j in (k - 12, k + 12))
-    return mask & ~seasonal, seasonal
+        pairs = [j for j in (k - 12, k + 12) if 0 <= j < n and elevated[j]]
+        if pairs:
+            seasonal[k] = True
+            limit[k] = max(ratio[j] for j in pairs) * SEASONAL_TOLERANCE * max(base[k], 1)
+    return mask & ~seasonal, seasonal, limit
 
 
 def leading_gap(views) -> int:
@@ -146,14 +155,16 @@ def analyze_series(months: list[str], views: list[int], project_total: list[int]
         return out
 
     spikes, base = detect_spikes(v)
-    spikes, seasonal = split_seasonal(v, spikes, base)
-    clean = np.where(spikes, base, v)
+    spikes, seasonal, limit = split_seasonal(v, spikes, base)
+    excess = v > limit
+    clean = np.minimum(np.where(spikes, base, v), limit)
     out["_clean"] = [int(x) for x in full[:lead]] + [int(x) for x in clean]
     out["spikes"] = [{"month": months[k], "views": int(v[k]), "x_baseline": round(v[k] / max(base[k], 1), 1)}
-                     for k in np.where(spikes)[0]]
+                     | ({"seasonal_excess": True, "kept": int(limit[k])} if excess[k] else {})
+                     for k in np.where(spikes | excess)[0]]
     out["seasonal_peaks"] = [{"month": months[k], "views": int(v[k]), "x_baseline": round(v[k] / max(base[k], 1), 1)}
                              for k in np.where(seasonal)[0]]
-    out["spike_share_pct"] = round(float((v[spikes] - base[spikes]).sum() / v.sum() * 100), 1)
+    out["spike_share_pct"] = round(float((v - clean).clip(0).sum() / v.sum() * 100), 1)
 
     raw = window_growth(v)
     cln = window_growth(clean)
