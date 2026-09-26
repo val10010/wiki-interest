@@ -18,6 +18,7 @@ VERY_LOW_VOLUME = 300
 TREND_P = 0.05        # growing/declining needs a significant trend; 0.2 gave ~11 % false "growing" (calibration)
 MIN_MONTHS = 6        # fewer months -> "no data"
 GAP_RATIO = 0.05      # leading months below this x the later median: the title did not exist yet (created / renamed)
+STEP_RATIO = 0.5      # after adding the old title's views, the months before the join must reach this x the months after
 
 
 def _pct(new: float, old: float) -> float | None:
@@ -107,6 +108,18 @@ def leading_gap(views) -> int:
     return k0
 
 
+def step_remains(views, lead: int, window: int = 6) -> bool:
+    """After the old title's redirect views were added to close a gap at `lead`: does a step remain at the join?
+    The median of up to `window` months before it must reach STEP_RATIO x the median of as many months after it.
+    A synonym redirect with 8 % of the article's views passes the GAP_RATIO test but leaves a 12x step; genuine
+    growth (+50 %/yr is 1.2x over six months) does not."""
+    v = np.asarray(views, dtype=float)
+    k = min(lead, len(v) - lead, window)
+    if k <= 0:
+        return False
+    return float(np.median(v[lead - k:lead])) < STEP_RATIO * float(np.median(v[lead:lead + k]))
+
+
 def window_growth(v: np.ndarray) -> dict:
     """Recent vs previous period. With >=24 months: last 12 vs previous 12
     (same calendar months -> seasonality cancels). Otherwise halves."""
@@ -162,7 +175,13 @@ def direction(growth_pct: float | None, trend_annual_pct: float, p: float) -> st
     return "flat" if abs(growth_pct) < 10 else "unclear"
 
 
-def analyze_series(months: list[str], views: list[int], project_total: list[int] | None) -> dict:
+GAP_KIND = {"created": "created", "renamed": "renamed", None: "created or renamed"}
+
+
+def analyze_series(months: list[str], views: list[int], project_total: list[int] | None,
+                   gap_kind: str | None = None) -> dict:
+    """`gap_kind`: what the pipeline learnt about a leading gap from the page history ("created" / "renamed"),
+    None when unknown; it only changes the wording of the reason."""
     full = np.array(views, dtype=float)
     lead = leading_gap(full)
     # Statistics use only the months in which the title existed; the chart still gets the whole period.
@@ -176,7 +195,7 @@ def analyze_series(months: list[str], views: list[int], project_total: list[int]
     gap_reason = None
     if lead:
         out["data_start"], out["gap_months"] = months[0], lead
-        gap_reason = (f"no views before {months[0]} (article created or renamed then): "
+        gap_reason = (f"no views before {months[0]} (article {GAP_KIND[gap_kind]} then): "
                       f"statistics use only the last {n} of {n + lead} months")
     if n < MIN_MONTHS or v.sum() == 0:
         out.update({"direction": "no data", "reliability": "low", "score": 0,

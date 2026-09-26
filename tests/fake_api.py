@@ -8,6 +8,12 @@ Synthetic series per language (monthly, with seasonality):
   sk: flat, NOT linked in Wikidata     -> reachable only via --article sk:Title
   ro: flat, renamed in 2024-05; the old title is a redirect -> gap closed by adding redirects
   hu: flat, article created in 2024-03, no redirects         -> gap stays, stats from 2024-03 only
+  it: flat, renamed in 2024-05; the old title plus two synonym redirects (~1.5 % of views each, all period)
+      -> only the old title is added, the synonyms are not
+  fi: flat, moved in 2024-05 WITHOUT leaving a redirect; one synonym redirect with ~8 % of the views all period
+      -> the synonym passes the 5 % gap test but leaves a step: the gap is not closed
+The first revision of a page (creation date; history moves with the page on a rename): hu 2024-03, everything
+else years before the test window.
 """
 import math
 import re
@@ -18,8 +24,14 @@ import numpy as np
 LABELS = {"Q777": "fasting"}
 SITELINKS = {"plwiki": "Post przerywany", "cswiki": "Přerušovaný půst",
              "ukwiki": "Інтервальне голодування", "enwiki": "Intermittent fasting",
-             "rowiki": "Post intermitent", "huwiki": "Időszakos böjt"}
-REDIRECTS = {"Post intermitent": ["Post alimentar intermitent"]}   # old title, now a redirect
+             "rowiki": "Post intermitent", "huwiki": "Időszakos böjt",
+             "itwiki": "Digiuno intermittente", "fiwiki": "Pätkäpaasto"}
+REDIRECTS = {"Post intermitent": ["Post alimentar intermitent"],           # old title, now a redirect
+             "Digiuno intermittente": ["Digiuno a intermittenza", "Dieta 16:8", "Digiuno alternato"],
+             "Pätkäpaasto": ["Jaksottainen paasto"]}                        # a synonym; the old title is gone
+OLD_TITLES = {"Post alimentar intermitent", "Digiuno a intermittenza"}
+SYNONYM_SHARE = {"Dieta 16:8": 0.015, "Digiuno alternato": 0.015, "Jaksottainen paasto": 0.08}
+FIRST_REVISION = {"Időszakos böjt": "2024-03-10T12:00:00Z"}               # everything else: 2012-01-01
 RENAMED = (2024, 5)         # ro: views move from the old title to the new one this month
 CREATED = (2024, 3)         # hu: the article exists from this month on
 
@@ -38,7 +50,7 @@ def _months(a: str, b: str):
 
 ORIGIN = (2023, 9)          # k = 0 here; tests analyse 2023-09 .. 2025-08
 SPIKE_MONTH = (2025, 4)     # cs viral spike (5th month from the end of that window)
-SEEDS = {"pl": 1, "cs": 2, "uk": 3, "en": 4, "sk": 5, "ro": 6, "hu": 7}
+SEEDS = {"pl": 1, "cs": 2, "uk": 3, "en": 4, "sk": 5, "ro": 6, "hu": 7, "it": 8, "fi": 9}
 
 
 def _value(lang: str, y: int, m: int, title: str = "") -> int:
@@ -57,9 +69,13 @@ def _value(lang: str, y: int, m: int, title: str = "") -> int:
         v = 2000 * season * rng.normal(1, 0.05)
     elif lang == "uk":
         v = 60 * season * rng.normal(1, 0.35)
-    elif lang == "ro":
+    elif title in SYNONYM_SHARE:
+        v = SYNONYM_SHARE[title] * 3000 * season
+    elif lang in ("ro", "it"):
         before = (y, m) < RENAMED
-        v = 3000 * season * rng.normal(1, 0.05) if before == (title != "Post intermitent") else 4  # redirect trickle
+        v = 3000 * season * rng.normal(1, 0.05) if before == (title in OLD_TITLES) else 4  # redirect trickle
+    elif lang == "fi":
+        v = 3000 * season * rng.normal(1, 0.05) if (y, m) >= RENAMED else 0                 # moved, no redirect
     elif lang == "hu":
         v = 2500 * season * rng.normal(1, 0.05) if (y, m) >= CREATED else 0
     else:
@@ -91,6 +107,9 @@ def fake_get_json(url, params=None, ttl=None, retries=3):
         qid = "Q1" if title in SITELINKS.values() else "Q777"   # anything unlinked = broader "fasting"
         return {"query": {"pages": [{"title": title, "pageprops": {"wikibase_item": qid},
                                      "description": "religious practice" if qid == "Q777" else "diet"}]}}
+    if url.endswith("/w/api.php") and params.get("prop") == "revisions":
+        ts = FIRST_REVISION.get(params["titles"], "2012-01-01T00:00:00Z")
+        return {"query": {"pages": [{"title": params["titles"], "revisions": [{"timestamp": ts}]}]}}
     if url.endswith("/w/api.php") and params.get("prop") == "redirects":
         return {"query": {"pages": [{"redirects": [{"title": t} for t in REDIRECTS.get(params["titles"], [])]}]}}
     m = re.search(r"per-article/(\w+)\.wikipedia/[^/]+/[^/]+/(.+)/monthly/(\d{10})/(\d{10})", url)

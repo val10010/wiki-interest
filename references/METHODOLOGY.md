@@ -15,10 +15,21 @@
    then a prefix whose every month is < 5 % of the median of the months after it (before a rename the new title is
    usually a redirect with a handful of views). The split is the latest one that leaves ≥ 6 months after it, so a
    late spike cannot pass for a gap. Counting such months turned a flat topic into "+191 %, high reliability".
-   When `analyze` finds such a gap it adds the article's redirects automatically (after a rename the old title
-   becomes a redirect): if the gap disappears, the sum is used and the output says so (`RENAMED` warning, verdict,
-   PDF caveat). If it stays, all statistics use only the months from `data_start` on, the reliability is capped
-   (medium; low with < 12 real months) and a `SHORT SERIES` warning gives the command to add an older title.
+   When `analyze` finds such a gap it looks at the article's redirects (after a rename the old title becomes one).
+   Only redirects with notable views *before* the gap are added: per month ≥ 5 % of the article's later median. A
+   real article has dozens of synonym redirects (up to 30 are checked); summing all of them over the whole period,
+   as the first version did, shifted the series' level against the other languages. The gap counts as closed only if
+   the sum has no leading gap **and no step at the join**: the median of up to six months before the first month with
+   views must reach half the median of as many months after it (genuine growth of +50 %/yr moves 1.2× over six
+   months; a synonym redirect with 8 % of the views passed the 5 % gap test alone and left a 12× step). Then the sum
+   is used and the output names what was added (`RENAMED` warning, verdict, PDF caveat: "views of the old title
+   «…» are counted"). Otherwise the original series is kept, all statistics use only the months from `data_start`
+   on, the reliability is capped (medium; low with < 12 real months) and a `SHORT SERIES` warning says what to do.
+   **Created or renamed?** The month of the page's first revision (`prop=revisions`, `rvdir=newer`) tells: the
+   history moves with the page on a rename, so a page whose history starts within a month of its first views was
+   *created* then (the verdict, the PDF and `reasons` say "created", and the warning does not ask for an older
+   title); one whose history is older was *renamed* (the warning asks for the old title, and names the redirects it
+   tried when they left a step). "created or renamed" remains only when the history could not be fetched.
 1. **Spike detection.** log(views) is compared to a centred 5-month rolling median. A month is a spike if its robust z-score (residual / 1.4826·MAD) > 3.5 **and** it is ≥ 1.8× the local median. Spikes are replaced by the rolling median (the "clean" series). They are reported, not hidden.
    **Seasonal peaks are not spikes:** if the same calendar month one year earlier or later is also ≥ 1.5× its own baseline, the peak is recurring (school start, New-year diets). It is reported as `seasonal_peaks` and kept in the data, because the year-over-year comparison already cancels it. Needs ≥ 13 months to see the repeat. A one-off event that happens to hit the same month twice would be misread as seasonal.
    **Only the seasonal part of a peak is kept.** The peak is limited to 1.75 × (the paired month's ratio to its own baseline) × its baseline; the excess is an anomaly, replaced and listed in `spikes` with `seasonal_excess: true` and the `kept` value. Without the limit a 6× viral September on top of a 1.8× school-start September passed as "seasonal" and produced +28.5 % growth for a topic that fell 5 %. Why 1.75: at the typical noise (σ = 0.17 of the monthly log change) the year-over-year difference of one month has s.d. ≈ √2·0.17 = 0.24, and ln 1.75 = 0.56 ≈ 2.3 s.d., so a genuine seasonal peak is clipped in about 1 % of cases, and then only by the part above the limit; with 1.5 it would be ~5 %, with 2.0 the repro above still showed +8 %.
@@ -82,7 +93,7 @@ One A4 page rendered with matplotlib. The table and the charts show at most 10 s
 - the whole topic is a proxy chosen by the agent for an abstract interest ("learning English" → `English language`):
   the code cannot detect this, so `analyze --proxy-for "<real interest>"` records it in `analysis.json`; the data line
   and the limits line of `answer_skeleton` name it, and the PDF gets a mandatory caveat;
-- a series has (almost) no views at the start of the period (step 0) → `RENAMED <lang>` when its redirects closed the gap (no action needed), else `SHORT SERIES <lang>` with the command to add an older title (`--article "lang:<current>" --article "lang:<old title>"`);
+- a series has (almost) no views at the start of the period (step 0) → `RENAMED <lang>` when its old title (a redirect with views before the gap) closed it (no action needed; the titles added are named), else `SHORT SERIES <lang>`: for a page created then, tell the user the data starts there; for a renamed one, the command to add the old title (`--article "lang:<current>" --article "lang:<old title>"`);
 - an article added with `--article` belongs to a different Wikidata item than the topic → `PROXY` warning, `[proxy]` in the table, and a caveat added to the PDF automatically. Example: for "Intermittent fasting" Polish has only `Post` (= fasting). Its seasonal peaks fall in March (Lent), which confirms it measures religious fasting, not the diet.
 
 ## Verdicts
@@ -154,8 +165,11 @@ aggregates monthly and daily totals separately; negligible next to the ±10 % th
 - Language ≠ country. Many readers use English Wikipedia. Ukrainian readers were split between uk and ru editions, with a strong shift to uk after 2022, so uk growth partly reflects language switching. Compare with the edition total (`rel. change`) and consider checking `ru` as well.
 - One article ≠ one topic. Use `A+B` to sum related articles and `--include-redirects` to add redirect views (up to 30 redirects per article).
 - Article renames or creation inside the period: the redirect check finds the old title only if it is still a
-  redirect to the article (up to 30 redirects). A topic that truly grew more than 20× from almost nothing is
-  indistinguishable from a new article and is analysed from the month it became visible, which is conservative.
+  redirect to the article (up to 30 redirects) and had ≥ 5 % of the later views per month before the gap; a move
+  that left no redirect is reported as renamed (from the page history) but the gap stays open until the agent adds
+  the old title by hand. A topic that truly grew more than 20× from almost nothing is indistinguishable from a new
+  article and is analysed from the month it became visible, which is conservative. The step test (half the level
+  over six months) would also reject a rename that coincided with a genuine doubling of interest.
 - The seasonal limit (1.75 × last year's peak ratio) also trims a seasonal peak that genuinely grew faster than the rest of the year; the trimmed part is listed in `spikes`, so it is visible.
 - `flat` means no change beyond ±10 % was measured, not "no growth": with typical noise, growth of +10–20 %/yr is often reported as flat (see Calibration).
 - `direction_share` divides by the edition total, which also moves with the edition's own composition (a large new topic, a bot wave counted as user traffic); a share change is evidence about relative interest, not proof.

@@ -60,7 +60,9 @@ plus the whole edition's total, runs `stats.analyze_series` per series → `pipe
   up to 1.75× the paired peak (excess = `seasonal_excess` spike), 12-vs-12-month growth, share of edition traffic,
   Theil–Sen + Mann–Kendall on views and on share (`direction` / `direction_share`), and a 0–10 reliability score
   (six components; months-up points only when they agree with the sign of growth) with volume and gap caps.
-  `pipeline` adds redirects automatically when `leading_gap` finds a gap (`rename_fix` on the series).
+  When `leading_gap` finds a gap, `pipeline.close_gap` adds only redirects with views before it and accepts the sum only
+  without a step at the join (`stats.step_remains`); `pipeline.gap_kind` reads the page's first revision to say
+  created vs renamed (`rename_fix` on the series: `added`, `closed`, `kind`, `page_created`).
   Thresholds are documented in `references/METHODOLOGY.md`; keep the two in sync.
 - `interpret.py` holds **every sentence the user may see** (the verdict opening names views and share when
   `direction_share` disagrees; `--proxy-for` goes into the data and limits lines and the PDF): `warnings` (each
@@ -89,7 +91,9 @@ effects (iteration 4 was reverted for that reason); judge such changes over repe
 
 `tests/fake_api.py` is a deterministic stand-in for every Wikimedia endpoint (pl grows, cs flat + spike, uk tiny,
 en declines, sk unlinked in Wikidata, `Q777` = broader "fasting", ro renamed in 2024-05 with the old title as a
-redirect, hu created in 2024-03; per-article values depend on the title, redirects come from `REDIRECTS`). Any new
+redirect, hu created in 2024-03, it renamed with two synonym redirects besides the old title, fi moved without a
+redirect but with an 8 % synonym; per-article values depend on the title, redirects come from `REDIRECTS`, first
+revisions from `FIRST_REVISION`). Any new
 API call in `wiki.py` needs a branch there, or tests fail with `unexpected url`.
 Fixtures in `tests/conftest.py`: `fake` (patch API), `runs` (temp `RUNS_DIR`), `analyze(*argv)` (run the CLI,
 return parsed JSON), `series_with(**stats)`. Most tests in `test_cli.py` are regressions for real failures found in review or in Haiku runs; README lists them.

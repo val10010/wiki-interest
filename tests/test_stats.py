@@ -167,3 +167,12 @@ def test_missing_edition_total_explains_the_lost_point():
     for total in (None, [10**8] * 23 + [0]):
         s = stats.analyze_series(MONTHS, v, total)
         assert any("edition" in r and "normalis" in r for r in s["reasons"])
+
+
+def test_step_remains_after_adding_redirects():
+    # After the old title's views are added there must be no step at the rename month; a synonym redirect with
+    # 8 % of the views fills the 5 % gap test but not the level.
+    assert stats.step_remains([240] * 8 + [3000] * 16, 8)
+    assert not stats.step_remains([3000] * 8 + [3000] * 16, 8)
+    assert not stats.step_remains([int(3000 * 1.5 ** (k / 12)) for k in range(24)], 8)   # +50 %/yr growth is no step
+    assert stats.step_remains([0, 0, 1200] + [3000] * 21, 3) and not stats.step_remains([1600] + [3000] * 23, 1)

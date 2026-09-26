@@ -11,6 +11,8 @@ import json
 import re
 from pathlib import Path
 
+import numpy as np
+
 from . import charts, interpret, stats, wiki
 from .paths import DIRS
 
@@ -91,6 +93,38 @@ def _series_views(lang: str, titles: list[str], start, end, months, include_redi
     return total, len(all_titles) - len(titles)
 
 
+def close_gap(lang: str, titles: list[str], total: list[int], lead: int, start, end, months: list[str]) -> tuple[dict, list[int]]:
+    """A series with no views before months[lead] (stats.leading_gap): after a rename the old title is a redirect
+    whose views fill the gap. Only redirects with notable views before the gap are added (>= GAP_RATIO x the later
+    median per month): a real article has dozens of synonym redirects, and summing all of them over the whole period
+    shifted its level against the other languages. The gap counts as closed only if the sum has no leading gap and
+    no step at the join (stats.step_remains): a synonym with 8 % of the views passed the 5 % gap test alone.
+    Returns (rename_fix, the series to analyse: the sum when closed, else the original)."""
+    cands = [r for t in titles for r in wiki.redirects(lang, t)]
+    later = float(np.median(total[lead:]))
+    added, summed = [], list(total)
+    for r in cands:
+        v = wiki.article_views(lang, r, start, end)
+        vals = [v[m] for m in months]
+        if sum(vals[:lead]) / lead >= stats.GAP_RATIO * later:
+            added.append(r)
+            summed = [a + b for a, b in zip(summed, vals)]
+    closed = bool(added) and stats.leading_gap(summed) == 0 and not stats.step_remains(summed, lead)
+    fix = {"views_start": months[lead], "redirects": len(cands), "added": added, "closed": closed}
+    return fix, (summed if closed else total)
+
+
+def gap_kind(lang: str, titles: list[str], views_start: str) -> tuple[str | None, str | None]:
+    """("created" | "renamed" | None, first revision month): a page whose history starts within a month of its
+    first views was created then; one created earlier was renamed then (the history moves with the page)."""
+    created = [wiki.first_revision(lang, t) for t in titles]
+    if not created or None in created:
+        return None, None
+    newest = max(created)
+    month_before = wiki.add_months(wiki.parse_month(views_start), -1).strftime("%Y-%m")
+    return ("created" if newest >= month_before else "renamed"), newest
+
+
 def build_analysis(topics: list[str], articles: dict[str, list[str]], langs_spec: str,
                    start: dt.date, end: dt.date, *, search_lang: str = "en",
                    include_redirects: bool = False, ui: str = "uk", command: str = "",
@@ -138,23 +172,24 @@ def build_analysis(topics: list[str], articles: dict[str, list[str]], langs_spec
                 if any(i["qid"] not in topic_qids for i in infos):
                     proxy = infos
             total, n_redirects = _series_views(lang, titles, start, end, months, include_redirects)
-            rename_fix = None
+            rename_fix, kind = None, None
             lead = stats.leading_gap(total)
             if lead:
-                # No views before some month: the article was created or renamed then. After a rename the
-                # old title is a redirect, so its views fill the gap; if they do, use the sum.
-                if not include_redirects:
-                    with_r, n_r = _series_views(lang, titles, start, end, months, True)
-                    closed = n_r > 0 and stats.leading_gap(with_r) == 0
-                    if closed:
-                        total, n_redirects = with_r, n_r
+                # No views before some month: the article was created or renamed then. After a rename the old
+                # title is a redirect, so its views fill the gap (close_gap); the page history tells which it was.
+                if include_redirects:
+                    rename_fix = {"views_start": months[lead], "redirects": n_redirects, "added": [], "closed": False}
                 else:
-                    n_r, closed = n_redirects, False
-                rename_fix = {"views_start": months[lead], "redirects": n_r, "closed": closed}
+                    rename_fix, total = close_gap(lang, titles, total, lead, start, end, months)
+                    if rename_fix["closed"]:
+                        n_redirects = len(rename_fix["added"])
+                kind, created = gap_kind(lang, titles, months[lead])
+                kind = "renamed" if rename_fix["closed"] else kind
+                rename_fix.update(kind=kind, page_created=created)
             if lang not in project_cache:
                 pv = wiki.project_views(lang, start, end)
                 project_cache[lang] = [pv[m] for m in months]
-            st = stats.analyze_series(months, total, project_cache[lang])
+            st = stats.analyze_series(months, total, project_cache[lang], gap_kind=kind)
             clean = st.pop("_clean", total)
             series.append({"id": f"{slug(r['topic'])}|{lang}", "topic": r["topic"], "lang": lang,
                            "title": " + ".join(titles), "titles": list(titles), "proxy": proxy,

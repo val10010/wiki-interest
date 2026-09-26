@@ -133,6 +133,18 @@ def redirects(lang: str, title: str, cap: int = 30) -> list[str]:
     return [r["title"] for p in pages for r in p.get("redirects", [])][:cap]
 
 
+def first_revision(lang: str, title: str) -> str | None:
+    """Month (YYYY-MM) of the page's first revision, i.e. when it was created. The history moves with the page
+    on a rename, so a page created years before its title got views was renamed, not created, then."""
+    data = get_json(f"https://{lang}.wikipedia.org/w/api.php",
+                    {"action": "query", "prop": "revisions", "titles": title, "rvlimit": 1, "rvdir": "newer",
+                     "rvprop": "timestamp", "redirects": 1, "format": "json", "formatversion": 2}, ttl=META_TTL)
+    for p in data.get("query", {}).get("pages", []):
+        for r in p.get("revisions", []):
+            return r["timestamp"][:7]
+    return None
+
+
 # ---------------------------------------------------------------- pageviews
 def _monthly(url_for, start: dt.date, end: dt.date) -> dict[str, int]:
     """Monthly counts {YYYY-MM: n} for [start, end], months without data = 0.

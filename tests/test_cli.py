@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from wiki_interest import cli, report, wiki
+from wiki_interest import cli, interpret, report, wiki
 
 FIT = {"series_shown": 1, "series_total": 1, "conclusion_truncated": False}  # what a mocked save_pdf returns
 
@@ -174,10 +174,11 @@ def test_renamed_article_gap_is_closed_by_its_redirect(analyze):
     out = analyze("--langs", "pl,ro")
     a = json.loads((Path(out["run_dir"]) / "analysis.json").read_text())
     ro = next(s for s in a["series"] if s["lang"] == "ro")
-    assert ro["rename_fix"] == {"views_start": "2024-05", "redirects": 1, "closed": True}
+    assert ro["rename_fix"] == {"views_start": "2024-05", "redirects": 1, "added": ["Post alimentar intermitent"],
+                                "closed": True, "kind": "renamed", "page_created": "2012-01"}
     assert "data_start" not in ro["stats"] and ro["stats"]["direction"] == "flat"
-    assert any(w.startswith("RENAMED ro") for w in out["warnings"])
-    assert any("перейменовано" in v for v in out["verdicts"] if v.startswith("ro"))
+    assert any(w.startswith("RENAMED ro") and "'Post alimentar intermitent'" in w for w in out["warnings"])
+    assert any("перейменовано" in v and "«Post alimentar intermitent»" in v for v in out["verdicts"] if v.startswith("ro"))
 
 
 def test_new_article_is_analysed_from_its_first_month_only(analyze, monkeypatch):
@@ -187,7 +188,7 @@ def test_new_article_is_analysed_from_its_first_month_only(analyze, monkeypatch)
     hu = next(s for s in a["series"] if s["lang"] == "hu")
     assert hu["stats"]["data_start"] == "2024-03" and hu["stats"]["direction"] != "growing"
     assert hu["stats"]["reliability"] != "high" and hu["rename_fix"]["closed"] is False
-    assert any(w.startswith("SHORT SERIES hu") and "--article" in w for w in out["warnings"])
+    assert any(w.startswith("SHORT SERIES hu") for w in out["warnings"])
     assert any("лише з 2024-03" in v for v in out["verdicts"] if v.startswith("hu"))
     seen = {}
     monkeypatch.setattr(report, "save_pdf", lambda a, path, title, concl, caveats, ui: seen.update(c=caveats) or FIT)
@@ -272,3 +273,64 @@ def test_runs_prefix_is_looked_up_in_the_configured_runs_dir_first(analyze, caps
     (cwd / "runs" / "only-here" / "analysis.json").write_text("{}")
     assert paths.find_run("runs/only-here", run.parent) == cwd / "runs" / "only-here"   # fallback still works
     assert paths.find_run(f"other/{run.name}", run.parent) == run                        # by name, as before
+
+
+# ------------------------------------------------------------------ rename fix, second review (README, iteration 8)
+def test_only_redirects_with_views_before_the_gap_are_added(analyze, monkeypatch):
+    # it: renamed in 2024-05; besides the old title the article has two synonym redirects with ~1.5 % of its views
+    # over the whole period. Summing all 30 redirects shifted the level against the other languages.
+    from fake_api import _value
+    out = analyze("--langs", "pl,it")
+    a = json.loads((Path(out["run_dir"]) / "analysis.json").read_text())
+    it = next(s for s in a["series"] if s["lang"] == "it")
+    assert it["rename_fix"]["closed"] and it["rename_fix"]["kind"] == "renamed"
+    assert it["rename_fix"]["redirects"] == 3 and it["rename_fix"]["added"] == ["Digiuno a intermittenza"]
+    assert it["redirects_included"] == 1
+    main, old = "Digiuno intermittente", "Digiuno a intermittenza"
+    for k, (y, m) in ((0, (2023, 9)), (-1, (2025, 8))):                                # old title yes, synonyms no
+        assert it["views"][k] == _value("it", y, m, main) + _value("it", y, m, old)
+    assert any("«Digiuno a intermittenza»" in v and "Dieta 16:8" not in v for v in out["verdicts"] if v.startswith("it"))
+    assert any(w.startswith("RENAMED it") and "'Digiuno a intermittenza'" in w for w in out["warnings"])
+    seen = {}
+    monkeypatch.setattr(report, "save_pdf", lambda a, path, title, concl, caveats, ui: seen.update(c=caveats) or FIT)
+    cli.main(["report", out["run_dir"], "--conclusion", "x"])
+    assert any(c.startswith("Перейменування (it)") and "«Digiuno a intermittenza»" in c for c in seen["c"])
+    assert any(c.startswith("Rename (it)") and "'Digiuno a intermittenza'" in c
+               for c in interpret.report_caveats(a, "en"))
+
+
+def test_move_without_a_redirect_leaves_the_gap_open(analyze):
+    # fi: moved in 2024-05, the old title was deleted; a synonym redirect with 8 % of the views passed the 5 % gap
+    # test, so the gap counted as closed although a 12x step remained.
+    from fake_api import _value
+    out = analyze("--langs", "pl,fi")
+    a = json.loads((Path(out["run_dir"]) / "analysis.json").read_text())
+    fi = next(s for s in a["series"] if s["lang"] == "fi")
+    assert fi["rename_fix"]["closed"] is False and fi["rename_fix"]["added"] == ["Jaksottainen paasto"]
+    assert fi["stats"]["data_start"] == "2024-05" and fi["redirects_included"] == 0
+    assert fi["views"][-1] == _value("fi", 2025, 8, "Pätkäpaasto")                     # the synonym is not summed
+    assert fi["rename_fix"]["kind"] == "renamed"                                       # page history predates the period
+    w = next(w for w in out["warnings"] if w.startswith("SHORT SERIES fi"))
+    assert "renamed" in w and "created or renamed" not in w and "--article" in w and "Jaksottainen paasto" in w
+    v = next(v for v in out["verdicts"] if v.startswith("fi"))
+    assert "стаття перейменована тоді" in v and "створена або" not in v
+
+
+def test_new_article_is_called_created_not_renamed(analyze, monkeypatch, capsys):
+    # hu: page history starts in 2024-03, the month its views start -> created, and no "add the old title" advice.
+    out = analyze("--langs", "pl,hu")
+    a = json.loads((Path(out["run_dir"]) / "analysis.json").read_text())
+    hu = next(s for s in a["series"] if s["lang"] == "hu")
+    assert hu["rename_fix"]["kind"] == "created" and hu["rename_fix"]["page_created"] == "2024-03"
+    assert any("article created then" in r for r in hu["stats"]["reasons"])
+    w = next(w for w in out["warnings"] if w.startswith("SHORT SERIES hu"))
+    assert "created" in w and "created or renamed" not in w and "<old title>" not in w
+    v = next(v for v in out["verdicts"] if v.startswith("hu"))
+    assert "стаття створена тоді" in v
+    seen = {}
+    monkeypatch.setattr(report, "save_pdf", lambda a, path, title, concl, caveats, ui: seen.update(c=caveats) or FIT)
+    cli.main(["report", out["run_dir"], "--conclusion", "x"])
+    assert any(c.startswith("Неповний ряд (hu)") and "стаття створена" in c and "або" not in c for c in seen["c"])
+    capsys.readouterr()
+    en = analyze("--langs", "pl,hu", "--ui", "en")
+    assert any("article created then" in v for v in en["verdicts"] if v.startswith("hu"))

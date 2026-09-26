@@ -47,9 +47,12 @@ VERDICT = {
            "body": "{dir}. Зміна {g}, частка в трафіку розділу {rel}, тренд {t}/рік; {med} переглядів/міс; "
                    "надійність {level}{cap}.",
            "cap": {"volume": "малим обсягом", "gap": "неповним рядом"}, "cap_fmt": " (обмежено {k})", "and": " і ",
-           "gap": " Дані лише з {m} (стаття створена або перейменована тоді): статистику пораховано за {n} міс., "
+           "gap": " Дані лише з {m} (стаття {kind} тоді): статистику пораховано за {n} міс., "
                   "без порівняння з тими самими місяцями рік тому.",
-           "renamed": " Статтю перейменовано: до {m} враховано перегляди старої назви (редиректу), ряд безперервний.",
+           "kind": {"created": "створена", "renamed": "перейменована", None: "створена або перейменована"},
+           "renamed": " Статтю перейменовано: до {m} враховано перегляди старої назви {old} (редиректу), ряд безперервний.",
+           "renamed_many": " Статтю перейменовано: до {m} враховано перегляди старих назв {old} (редиректів), "
+                           "ряд безперервний.",
            "views_dir": {"growing": "перегляди ростуть", "declining": "перегляди падають",
                          "flat": "перегляди майже не змінились (±10%)", "unclear": "перегляди без підтвердженого тренду"},
            "share_dir": {"growing": "відносний інтерес (частка в трафіку розділу) зростає",
@@ -71,10 +74,13 @@ VERDICT = {
            "body": "{dir}. Change {g}, share of edition traffic {rel}, trend {t}/yr; {med} views/month; "
                    "reliability {level}{cap}.",
            "cap": {"volume": "low volume", "gap": "an incomplete series"}, "cap_fmt": " (capped by {k})", "and": " and ",
-           "gap": " Data only since {m} (article created or renamed then): statistics cover {n} months, "
+           "gap": " Data only since {m} (article {kind} then): statistics cover {n} months, "
                   "without a same-months-last-year comparison.",
-           "renamed": " The article was renamed: before {m} views of the old title (a redirect) are counted, "
+           "kind": {"created": "created", "renamed": "renamed", None: "created or renamed"},
+           "renamed": " The article was renamed: before {m} views of the old title {old} (a redirect) are counted, "
                       "so the series is continuous.",
+           "renamed_many": " The article was renamed: before {m} views of the old titles {old} (redirects) are "
+                           "counted, so the series is continuous.",
            "views_dir": {"growing": "views are growing", "declining": "views are declining",
                          "flat": "views barely moved (±10%)", "unclear": "views show no confirmed trend"},
            "share_dir": {"growing": "relative interest (share of edition traffic) is growing",
@@ -151,6 +157,10 @@ def rank_key(s: dict) -> float:
     return -1e9 if x is None else x
 
 
+def quoted(titles: list[str], ui: str = "uk") -> str:
+    return ", ".join(f"«{t}»" if ui == "uk" else f"'{t}'" for t in titles)
+
+
 def proxy_label(s: dict) -> str | None:
     if not s.get("proxy"):
         return None
@@ -185,18 +195,35 @@ def build_warnings(topics_out: list[dict], series: list[dict]) -> list[str]:
     for s in series:
         fix, st = s.get("rename_fix") or {}, s["stats"]
         if fix.get("closed"):
+            added = quoted(fix.get("added") or [], "en")
             out.append(f"RENAMED {s['lang']}: '{s['title']}' had no views before {fix['views_start']} (renamed then). "
-                       f"Views of its {fix['redirects']} redirect(s), including the old title, were added "
-                       "automatically and close the gap; the verdict says so. No action needed.")
+                       f"Views of its old title {added} were added automatically and close the gap (of its "
+                       f"{fix['redirects']} redirect(s) only those with views before that month are added; the "
+                       "verdict names them). No action needed.")
         elif st.get("data_start"):
             titles = s.get("titles") or [s["title"]]
             add = " ".join(f'--article "{s["lang"]}:{t}"' for t in titles)
-            out.append(f"SHORT SERIES {s['lang']}: '{s['title']}' has (almost) no views before {st['data_start']}: "
-                       f"the article was created or renamed then, and its redirects do not fill the gap. Statistics "
-                       f"use only {st['data_start']} onwards ({st.get('months')} months) and reliability is capped; "
-                       f"the verdict says so, quote it. If the article had an older title, rerun the same command "
-                       f'with {add} --article "{s["lang"]}:<old title>" (titles of one language are summed); '
-                       f"otherwise tell the user that {s['lang']} has data only since {st['data_start']}.")
+            kind, created = fix.get("kind"), fix.get("page_created")
+            tried = (f" (adding its redirect(s) {', '.join(repr(t) for t in fix['added'])} still leaves a step at "
+                     f"{fix['views_start']})" if fix.get("added") else "")
+            head = (f"SHORT SERIES {s['lang']}: '{s['title']}' has (almost) no views before {st['data_start']}: ")
+            tail = (f"Statistics use only {st['data_start']} onwards ({st.get('months')} months) and reliability is "
+                    f"capped; the verdict says so, quote it. ")
+            old_title = (f"rerun the same command with {add} --article \"{s['lang']}:<old title>\" (titles of one "
+                         f"language are summed)")
+            if kind == "created":
+                out.append(head + f"the article was created then (its page history starts in {created}), so there is "
+                           f"no older title to add. " + tail +
+                           f"Tell the user that {s['lang']} has data only since {st['data_start']}.")
+            elif kind == "renamed":
+                out.append(head + f"the article was renamed then (its page history starts in {created}), but no "
+                           f"redirect fills the gap{tried}. " + tail +
+                           f"If you know the old title, {old_title}; otherwise tell the user that {s['lang']} has "
+                           f"data only since {st['data_start']}.")
+            else:
+                out.append(head + f"the article was created or renamed then, and its redirects do not fill the "
+                           f"gap{tried}. " + tail + f"If the article had an older title, {old_title}; otherwise tell "
+                           f"the user that {s['lang']} has data only since {st['data_start']}.")
     thin = [s for s in series if (s["stats"].get("median_monthly") or 0) < stats.VERY_LOW_VOLUME]
     if thin and len(thin) * 2 >= len(series):
         names = ", ".join(f"{s['topic']} · {s['lang']}" for s in thin)
@@ -248,10 +275,12 @@ def verdict(s: dict, ui: str) -> str:
             text += v["share_up"] if g < 0 else v["share_down"]
         elif abs(g) < 10 <= abs(rel):
             text += v["share_moved"].format(rel=_pct_txt(rel))
+    fix = s.get("rename_fix") or {}
     if st.get("data_start"):
-        text += v["gap"].format(m=st["data_start"], n=st.get("months"))
-    elif (s.get("rename_fix") or {}).get("closed"):
-        text += v["renamed"].format(m=s["rename_fix"]["views_start"])
+        text += v["gap"].format(m=st["data_start"], n=st.get("months"), kind=v["kind"][fix.get("kind")])
+    elif fix.get("closed"):
+        added = fix.get("added") or []
+        text += v["renamed_many" if len(added) > 1 else "renamed"].format(m=fix["views_start"], old=quoted(added, ui))
     if st.get("seasonal_peaks"):
         text += v["seasonal"].format(m=", ".join(p["month"] for p in st["seasonal_peaks"]))
     if st.get("spikes"):
@@ -431,16 +460,18 @@ def report_caveats(analysis: dict, ui: str, extra: list[str] | None = None) -> l
                                "itself; comparing it with other languages compares different concepts."))
     for s in analysis["series"]:
         ds, fix = s["stats"].get("data_start"), s.get("rename_fix") or {}
+        kind = VERDICT[ui]["kind"][fix.get("kind")]
         if ds:
-            caveats.insert(0, (f"Неповний ряд ({s['lang']}): «{s['title']}» не має переглядів до {ds} (стаття створена "
-                               f"або перейменована); статистику пораховано лише з {ds}." if ui == "uk" else
+            caveats.insert(0, (f"Неповний ряд ({s['lang']}): «{s['title']}» не має переглядів до {ds} (стаття {kind}); "
+                               f"статистику пораховано лише з {ds}." if ui == "uk" else
                                f"Incomplete series ({s['lang']}): '{s['title']}' has no views before {ds} (article "
-                               f"created or renamed); statistics use {ds} onwards only."))
+                               f"{kind}); statistics use {ds} onwards only."))
         elif fix.get("closed"):
+            old_t = quoted(fix.get("added") or [], ui)
             caveats.insert(0, (f"Перейменування ({s['lang']}): до {fix['views_start']} враховано перегляди старої назви "
-                               "(редиректу)." if ui == "uk" else
-                               f"Rename ({s['lang']}): before {fix['views_start']} views of the old title (a redirect) "
-                               "are counted."))
+                               f"{old_t} (редиректу)." if ui == "uk" else
+                               f"Rename ({s['lang']}): before {fix['views_start']} views of the old title {old_t} "
+                               "(a redirect) are counted."))
     low = [f"{s['topic']} · {s['lang']}" for s in analysis["series"] if s["stats"].get("reliability") == "low"]
     if low:
         caveats.insert(0, ("Низька надійність даних: " if ui == "uk" else "Low reliability: ") + ", ".join(low))
