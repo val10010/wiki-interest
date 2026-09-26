@@ -14,7 +14,7 @@
     "%",
     "(надійн|reliab)",
     "(польськ|pl\\b|polish)",
-    "(плат|willingness to pay)",
+    "(готовност\\w* платити|willingness to pay)",
     "(proxy|інш\\w* понят|не те саме|different concept|немає [^.]*статт|статт\\w* немає|no [^.]*article)"
    ],
    "answer_not": [
@@ -35,7 +35,7 @@
    "answer": [
     "(надійн|довір|reliab)",
     "%",
-    "(плат|willingness to pay)",
+    "(готовност\\w* платити|willingness to pay)",
     "(сезон|вересн|seasonal)"
    ],
    "answer_not": [
@@ -56,7 +56,7 @@
    ],
    "answer": [
     "\\.pdf",
-    "(плат|willingness to pay)",
+    "(готовност\\w* платити|willingness to pay)",
     "proxy"
    ],
    "files": [
@@ -82,7 +82,7 @@
    ],
    "answer": [
     "(sk|словац)",
-    "(плат|willingness to pay)",
+    "(готовност\\w* платити|willingness to pay)",
     "(proxy|інш\\w* понят|не те саме|different concept|немає [^.]*статт|статт\\w* немає|no [^.]*article)"
    ],
    "answer_not": [

@@ -1,5 +1,6 @@
 """evals/run_agent.py: the agent loop and its scoring, without OpenRouter; transcripts must be publishable."""
 import json
+import re
 import sys
 from pathlib import Path
 from types import SimpleNamespace as NS
@@ -96,3 +97,15 @@ def test_tool_output_is_cut_like_claude_code():
     assert run_agent.TOOL_OUTPUT_LIMIT == 30000
     out = run_agent.bash("printf '%040000d' 0")
     assert len(out) < 30100 and out.endswith("[truncated]")
+
+
+def test_limits_line_check_does_not_match_platform():
+    # Iteration 9 (Haiku subagents): an answer without the limits line passed because "міграція на інші
+    # платформи" matched the pattern `плат`. The check must want the limits line itself.
+    cases = json.loads((Path(run_agent.SKILL) / "evals" / "cases.json").read_text())
+    patterns = {p for c in cases for p in c["checks"]["answer"] if "плат" in p}
+    assert patterns, "every case checks the limits line"
+    for p in patterns:
+        assert not re.search(p, "міграція на інші платформи; платна версія", re.I)
+        assert re.search(p, "сигнал цікавості, а не готовності платити", re.I)
+        assert re.search(p, "curiosity, not willingness to pay", re.I)
