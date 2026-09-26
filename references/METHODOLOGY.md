@@ -54,6 +54,9 @@ One A4 page rendered with matplotlib. The table and the charts show at most 10 s
 `analyze` returns `warnings` when the measurement itself is questionable, each with the exact next command:
 - a requested language has no article linked to the Wikidata item → search locally and add it with `--article lang:Title` (merged into the same topic);
 - at least half of the series have median < 300 views/mo → percentages are noise; a proxy article is too narrow (use a broader one), otherwise the small audience is the finding;
+- the whole topic is a proxy chosen by the agent for an abstract interest ("learning English" → `English language`):
+  the code cannot detect this, so `analyze --proxy-for "<real interest>"` records it in `analysis.json`; the data line
+  and the limits line of `answer_skeleton` name it, and the PDF gets a mandatory caveat;
 - an article added with `--article` belongs to a different Wikidata item than the topic → `PROXY` warning, `[proxy]` in the table, and a caveat added to the PDF automatically. Example: for "Intermittent fasting" Polish has only `Post` (= fasting). Its seasonal peaks fall in March (Lent), which confirms it measures religious fasting, not the diet.
 
 ## Verdicts

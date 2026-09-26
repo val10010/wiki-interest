@@ -92,6 +92,8 @@ SKELETON = {
                      "мовний розділ ≠ країна.",
            "proxy": " Для {langs} виміряно інше поняття (proxy), тож порівняння з ними не пряме.",
            "low": " Низька надійність: {names} — лише як слабкий сигнал.",
+           "proxy_for": " (proxy для «{what}»: стаття міряє ширше поняття, а не саме цей інтерес)",
+           "proxy_for_limit": " «{topics}» — лише proxy для «{what}»: висновки про «{what}» непрямі.",
            "chart": "**Графік:** {path}"},
     "en": {"data": "**Data:** Wikipedia, {start} – {end} ({n} months); topic: {topics}.",
            "by_lang": "**By language:**", "missing": "**No article:** {langs} — the topic is undeveloped there (itself a signal).",
@@ -103,6 +105,8 @@ SKELETON = {
                      "language edition ≠ country.",
            "proxy": " For {langs} a different concept was measured (proxy), so comparing with them is not like-for-like.",
            "low": " Low reliability: {names} — a weak signal only.",
+           "proxy_for": " (a proxy for '{what}': the article measures a broader concept, not this interest itself)",
+           "proxy_for_limit": " '{topics}' is only a proxy for '{what}': conclusions about '{what}' are indirect.",
            "chart": "**Chart:** {path}"},
 }
 
@@ -245,9 +249,11 @@ def answer_skeleton(run_dir: Path, analysis: dict) -> str:
     mandatory element is already written here; the model fills only the slot."""
     ui = analysis.get("ui", "uk")
     k, series, p = SKELETON[ui], analysis["series"], analysis["period"]
-    lines = [k["data"].format(start=p["start"], end=p["end"], n=p["months"],
-                              topics=", ".join(t["topic"] for t in analysis["topics"])),
-             k["by_lang"]] + [f"- {verdict(s, ui)}" for s in series]
+    topics, what = ", ".join(t["topic"] for t in analysis["topics"]), analysis.get("proxy_for")
+    data = k["data"].format(start=p["start"], end=p["end"], n=p["months"], topics=topics)
+    if what:
+        data = data[:-1] + k["proxy_for"].format(what=what) + "."
+    lines = [data, k["by_lang"]] + [f"- {verdict(s, ui)}" for s in series]
     missing = sorted({l for t in analysis["topics"] for l in t["missing_languages"]})
     if missing:
         lines.append(k["missing"].format(langs=", ".join(missing)))
@@ -266,6 +272,8 @@ def answer_skeleton(run_dir: Path, analysis: dict) -> str:
             volume=" > ".join(f"{tag(s)} {s['stats'].get('median_monthly')}" for s in by_vol)))
     lines.append(k["slot"])
     limits = k["limits"]
+    if what:
+        limits += k["proxy_for_limit"].format(topics=topics, what=what)
     proxies = [s["lang"] for s in series if s.get("proxy")]
     if proxies:
         limits += k["proxy"].format(langs=", ".join(proxies))
@@ -347,4 +355,11 @@ def report_caveats(analysis: dict, ui: str, extra: list[str] | None = None) -> l
     low = [f"{s['topic']} · {s['lang']}" for s in analysis["series"] if s["stats"].get("reliability") == "low"]
     if low:
         caveats.insert(0, ("Низька надійність даних: " if ui == "uk" else "Low reliability: ") + ", ".join(low))
+    what = analysis.get("proxy_for")
+    if what:
+        topics = ", ".join(t["topic"] for t in analysis["topics"])
+        caveats.insert(0, (f"Proxy теми: інтерес до «{what}» виміряно через статтю «{topics}» — це ширше поняття, "
+                           "тож висновки непрямі." if ui == "uk" else
+                           f"Proxy topic: interest in '{what}' is measured via the article '{topics}', a broader "
+                           "concept, so conclusions are indirect."))
     return caveats

@@ -178,3 +178,23 @@ def test_new_article_is_analysed_from_its_first_month_only(analyze, monkeypatch)
     monkeypatch.setattr(report, "save_pdf", lambda a, path, title, concl, caveats, ui: seen.update(c=caveats) or FIT)
     cli.main(["report", out["run_dir"], "--conclusion", "x"])
     assert any(c.startswith("Неповний ряд (hu)") for c in seen["c"])
+
+
+# ------------------------------------------------------------------ --proxy-for (README, iteration 7)
+def test_proxy_for_is_named_in_data_line_limits_and_pdf(analyze, monkeypatch):
+    # Transcript english_learning_report: "learning English" measured via "English language" without saying so.
+    out = analyze("--langs", "pl,cs", "--proxy-for", "вивчення англійської")
+    a = json.loads((Path(out["run_dir"]) / "analysis.json").read_text())
+    assert a["proxy_for"] == "вивчення англійської"
+    lines = out["answer_skeleton"].split("\n")
+    assert "proxy для «вивчення англійської»" in lines[0]
+    assert "лише proxy для «вивчення англійської»" in next(l for l in lines if l.startswith("**Обмеження:**"))
+    seen = {}
+    monkeypatch.setattr(report, "save_pdf", lambda a, path, title, concl, caveats, ui: seen.update(c=caveats) or FIT)
+    cli.main(["report", out["run_dir"], "--conclusion", "x"])
+    assert seen["c"][0].startswith("Proxy теми") and "вивчення англійської" in seen["c"][0]
+
+
+def test_proxy_for_english_ui(analyze):
+    sk = analyze("--langs", "pl", "--proxy-for", "learning English", "--ui", "en")["answer_skeleton"]
+    assert "proxy for 'learning English'" in sk.split("\n")[0]

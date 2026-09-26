@@ -93,7 +93,8 @@ def _series_views(lang: str, titles: list[str], start, end, months, include_redi
 
 def build_analysis(topics: list[str], articles: dict[str, list[str]], langs_spec: str,
                    start: dt.date, end: dt.date, *, search_lang: str = "en",
-                   include_redirects: bool = False, ui: str = "uk", command: str = "") -> tuple[dict, list[str]]:
+                   include_redirects: bool = False, ui: str = "uk", command: str = "",
+                   proxy_for: str | None = None) -> tuple[dict, list[str]]:
     """Fetch everything and compute per-series stats. Returns (analysis, requested languages)."""
     if not topics and not articles:
         raise SystemExit("Give at least one --topic or --article lang:Title")
@@ -166,7 +167,7 @@ def build_analysis(topics: list[str], articles: dict[str, list[str]], langs_spec
 
     analysis = {"created": dt.datetime.now().isoformat(timespec="seconds"), "command": command,
                 "period": {"start": months[0], "end": months[-1], "months": len(months)},
-                "ui": ui, "topics": topics_out, "series": series,
+                "ui": ui, "proxy_for": proxy_for, "topics": topics_out, "series": series,
                 "warnings": interpret.build_warnings(topics_out, series),
                 "caveats": list(interpret.GLOBAL_CAVEATS[ui])}
     return analysis, requested_langs

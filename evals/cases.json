@@ -51,11 +51,13 @@
   "checks": {
    "commands": [
     "analyze",
-    "report"
+    "report",
+    "--proxy-for"
    ],
    "answer": [
     "\\.pdf",
-    "(плат|willingness to pay)"
+    "(плат|willingness to pay)",
+    "proxy"
    ],
    "files": [
     "runs/*/report.pdf"

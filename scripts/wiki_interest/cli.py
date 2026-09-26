@@ -44,7 +44,7 @@ def cmd_analyze(args):
     analysis, langs = pipeline.build_analysis(
         topics, pipeline.parse_articles(args.article), args.langs, start, end,
         search_lang=args.search_lang, include_redirects=args.include_redirects, ui=args.ui,
-        command=" ".join(sys.argv[1:]))
+        command=" ".join(sys.argv[1:]), proxy_for=args.proxy_for)
     name = args.name or pipeline.run_name(topics, langs, start, end, args.include_redirects)
     run_dir = Path(args.out) if args.out else pipeline.RUNS_DIR / name
     pipeline.save_run(analysis, run_dir)
@@ -110,6 +110,8 @@ def build_parser() -> argparse.ArgumentParser:
     a.add_argument("--end", help="YYYY-MM (default: last full month)")
     a.add_argument("--include-redirects", action="store_true")
     a.add_argument("--ui", default="uk", choices=["uk", "en"], help="language of chart/report labels")
+    a.add_argument("--proxy-for", help="what the user is really interested in, when --topic is only a proxy "
+                                       "article for it (e.g. 'learning English' measured via 'English language')")
     a.add_argument("--name", help="run name")
     a.add_argument("--out", help="run directory")
     a.set_defaults(func=cmd_analyze)

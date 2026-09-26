@@ -47,7 +47,8 @@ full path `<skill dir>/scripts/wi` from anywhere (it creates its own Python venv
    `scripts/wi resolve "Intermittent fasting" --langs pl,cs`
    Look at `label_en`, the titles per language and `alternatives`. If the wrong
    article was picked, rerun with the correct `Q…` id. For abstract ideas ("learning English")
-   pick a concrete proxy article and **tell the user which article you used as a proxy**.
+   pick a concrete proxy article and **always add `--proxy-for "<what the user asked about>"`**
+   (`--topic "English language" --proxy-for "learning English"`): the answer and the PDF then name the proxy.
    Prefer the broad general article (`"English language"`): narrow ones
    (`"English as a second or foreign language"`) often get < 100 views/month and are missing
    in many languages, which makes every result "low reliability".
@@ -125,7 +126,7 @@ scripts/wi analyze --topic "Astronomy" --langs uk
 scripts/wi resolve "post przerywany" --search-lang pl
 scripts/wi analyze --topic "Intermittent fasting" --langs pl,cs --article "pl:<title from resolve>"
 # which audiences next: many languages, then report
-scripts/wi analyze --topic "English language" --langs top:15 --months 36
+scripts/wi analyze --topic "English language" --proxy-for "learning English" --langs top:15 --months 36
 scripts/wi report runs/<run_name> --title "Інтерес до вивчення англійської" --conclusion "…"
 # two topics in one language
 scripts/wi analyze --topic "Astronomy" --topic "Astrology" --langs uk
