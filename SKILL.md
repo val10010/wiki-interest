@@ -112,7 +112,10 @@ run the tool and quote its numbers.**
 | `direction (share)` | the same for the share of edition traffic. When it differs, the verdict names both — quote it. |
 
 Decision rules:
-- Say "growing" only if `direction` is `growing`. For `unclear`, say the data does not confirm a trend.
+- Quote the verdict's opening words for the direction. Views are "growing" only if `direction` is `growing`;
+  relative interest (the share of edition traffic) is judged by `direction (share)` — when views are flat but
+  the share grows, the verdict says "relative interest … is growing", and that is what you say. For `unclear`,
+  say the data does not confirm a trend.
 - Never recommend a market on a `low` reliability series alone; say what extra check is needed.
 - Comparing audiences: consider both growth (`rel. change %`) and size (`median/mo`,
   `per_million_views_last12`). A small fast-growing edition and a large flat one are different bets — say which is which.
