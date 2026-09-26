@@ -6,6 +6,8 @@ import stat
 import subprocess
 from pathlib import Path
 
+import pytest
+
 from wiki_interest import paths
 
 ROOT = Path("/opt/skills/wiki-interest")
@@ -32,6 +34,10 @@ def test_env_overrides():
     assert paths.data_dirs(ROOT, {"WIKI_INTEREST_CACHE": "/c"}, writable=True)["cache"] == Path("/c")
 
 
+# chmod does not restrict root: `[ -w ]` in the launcher and os.access in paths.py both say "writable", so the
+# copy is not read-only for root and the test fails there (e.g. pytest in a Docker container). On a really
+# read-only mount (EROFS) the code itself works, the simulation does not.
+@pytest.mark.skipif(getattr(os, "geteuid", lambda: 1)() == 0, reason="chmod cannot make a directory read-only for root")
 def test_launcher_works_from_a_read_only_skill_dir(tmp_path):
     real = Path(__file__).resolve().parents[1]
     skill = tmp_path / "skill"
