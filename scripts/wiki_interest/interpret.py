@@ -101,8 +101,9 @@ VERDICT = {
 SKELETON = {
     "uk": {"data": "**Дані:** Wikipedia, {start} – {end} ({n} міс.); тема: {topics}.",
            "by_lang": "**По мовах:**", "missing": "**Статті немає:** {langs} — тема там не розвинена (це теж сигнал).",
-           "rank": "**Порівняння мов** (частка в трафіку розділу): {share}. **Обсяг:** {volume}.",
+           "rank": "**Порівняння мов** (частка в трафіку розділу): {none}{share}. **Обсяг:** {volume}.",
            "same": " (≈ без змін)",
+           "none_grow": "за часткою жодна мова не росте (усі зміни в межах ±10%): ",
            "slot": "**Висновок:** <ЗАПОВНИ: 1–3 речення лише з рядків вище — що це означає для рішення і що "
                    "перевірити далі. Без фактів і узагальнень, яких немає вище.>",
            "limits": "**Обмеження:** перегляди Wikipedia — сигнал цікавості, а не готовності платити; "
@@ -113,13 +114,14 @@ SKELETON = {
            "proxy_for_limit": " «{topics}» — лише proxy для «{what}»: висновки про «{what}» непрямі.",
            "shown": "**Показано {n} з {total} серій** (найбільша зміна частки); усі вердикти й повна таблиця: {path}",
            "rank_compact": "**Порівняння мов** (усі {total}; зміна частки в трафіку розділу, ≈ = у межах ±10%; "
-                           "у дужках — медіана переглядів/міс): {items}.",
+                           "у дужках — медіана переглядів/міс): {none}{items}.",
            "more": "… ще {n}",
            "chart": "**Графік:** {path}"},
     "en": {"data": "**Data:** Wikipedia, {start} – {end} ({n} months); topic: {topics}.",
            "by_lang": "**By language:**", "missing": "**No article:** {langs} — the topic is undeveloped there (itself a signal).",
-           "rank": "**Languages compared** (share of edition traffic): {share}. **Volume:** {volume}.",
+           "rank": "**Languages compared** (share of edition traffic): {none}{share}. **Volume:** {volume}.",
            "same": " (≈ no change)",
+           "none_grow": "no language grows by share (all changes within ±10%): ",
            "slot": "**Conclusion:** <FILL: 1–3 sentences using only the lines above — what it means for the "
                    "decision and what to check next. No facts or generalisations not stated above.>",
            "limits": "**Limits:** Wikipedia views measure curiosity, not willingness to pay; "
@@ -130,7 +132,7 @@ SKELETON = {
            "proxy_for_limit": " '{topics}' is only a proxy for '{what}': conclusions about '{what}' are indirect.",
            "shown": "**Showing {n} of {total} series** (largest share change); all verdicts and the full table: {path}",
            "rank_compact": "**Languages compared** (all {total}; share of edition traffic change, ≈ = within ±10%; "
-                           "median views/month in brackets): {items}.",
+                           "median views/month in brackets): {none}{items}.",
            "more": "… {n} more",
            "chart": "**Chart:** {path}"},
 }
@@ -306,6 +308,14 @@ def _volume_txt(x) -> str:
     return f"{x / 1e6:.1f}M" if x >= 1e6 else f"{x / 1e3:.1f}k" if x >= 1e4 else str(x)
 
 
+def _none_grow(series: list[dict], k: dict) -> str:
+    """Said in words when no share change reaches +10 %: "vi +2.4% (≈ no change) > tr +0.6%" was still read as
+    "vi is the only growing audience" (Haiku, iterations 6 and 9); a mark alone does not stop that."""
+    shares = [s["stats"].get("growth_share_pct") for s in series]
+    shares = [x for x in shares if x is not None]
+    return k["none_grow"] if shares and max(shares) < 10 else ""
+
+
 def _compact_comparison(series: list[dict], k: dict, ui: str) -> str:
     """Every language in one line (share change rounded, volume short): the comparison stays complete
     when verdicts are shown only for the top series."""
@@ -316,7 +326,7 @@ def _compact_comparison(series: list[dict], k: dict, ui: str) -> str:
             x = s["stats"].get("growth_pct")
         chg = "—" if x is None else ("≈" if abs(x) < 10 else "") + f"{x:+.0f}%"
         items.append(f"{_tag(s)} {chg} ({_volume_txt(s['stats'].get('median_monthly'))})")
-    return k["rank_compact"].format(total=len(series), items=_names(items, ui, COMPACT_LIMIT))
+    return k["rank_compact"].format(total=len(series), none=_none_grow(series, k), items=_names(items, ui, COMPACT_LIMIT))
 
 
 def answer_skeleton(run_dir: Path, analysis: dict, shown: list[dict] | None = None) -> str:
@@ -346,6 +356,7 @@ def answer_skeleton(run_dir: Path, analysis: dict, shown: list[dict] | None = No
                           key=lambda s: -s["stats"]["growth_share_pct"])
         by_vol = sorted(series, key=lambda s: -(s["stats"].get("median_monthly") or 0))
         lines.append(k["rank"].format(
+            none=_none_grow(series, k),
             share=" > ".join(f"{_tag(s)} {share(s)}" for s in by_share) or "—",
             volume=" > ".join(f"{_tag(s)} {s['stats'].get('median_monthly')}" for s in by_vol)))
     lines.append(k["slot"])

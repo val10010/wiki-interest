@@ -100,6 +100,11 @@ One A4 page rendered with matplotlib. The table and the charts show at most 10 s
 
 For each series the tool writes one sentence (`verdicts`, in the report language): direction, change, share change, trend, volume, reliability with cap, seasonal peaks, excluded spikes, and the proxy flag. The opening words come from `direction` when `direction_share` agrees. When they disagree and either is `growing`/`declining` (or views moved < 10 % but the share ≥ 10 %), the verdict opens with both instead of "interest is growing/declining": "views are declining together with the whole edition's traffic, while relative interest (share of edition traffic) is stable", or "views barely moved, but relative interest … is growing". Without `direction_share` (old runs) a shorter note after the numbers says the same. The agent quotes verdicts instead of phrasing conclusions, because in a Haiku 4.5 run the model called a `flat` series "growing" and merged numbers from different columns.
 
+**Languages compared.** The skeleton ranks the languages by share change and marks changes within ±10 % with
+"≈ no change". When no language reaches +10 %, the line also says so in words ("no language grows by share (all
+changes within ±10 %): vi +2.4% (≈ no change) > …"), because in the Haiku runs of iterations 6 and 9 the mark alone did
+not stop the model from calling the top of the list "the only growing audience" (3 of 8 answers in iteration 9).
+
 
 ## Calibration (`evals/calibrate_stats.py`)
 

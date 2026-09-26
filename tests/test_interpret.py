@@ -51,6 +51,32 @@ def test_comparison_line_marks_share_changes_within_noise(series_with):
     assert "vi +2.4% (≈ no change)" in interpret.answer_skeleton(Path("runs/x"), analysis)
 
 
+def test_comparison_line_says_no_language_grows_when_all_are_within_noise(series_with):
+    # Iterations 6 and 9: "vi +2.4% (≈ без змін) > tr +0.6% ..." was still read as "vi is the only growing audience"
+    # in 3 of 8 Haiku answers. The line must say it in words, not only with a mark.
+    def line(langs, ui="uk"):
+        series = [dict(series_with(growth_pct=-20.0, growth_share_pct=g), lang=l) for l, g in langs.items()]
+        analysis = {"ui": ui, "period": {"start": "2024-01", "end": "2025-12", "months": 24},
+                    "topics": [{"topic": "t", "missing_languages": []}], "series": series}
+        return next(l for l in interpret.answer_skeleton(Path("runs/x"), analysis).split("\n") if "**Обсяг" in l or "**Volume" in l)
+    flat = line({"vi": 2.4, "tr": 0.6, "pl": -9.8})
+    assert "за часткою жодна мова не росте" in flat and "vi +2.4% (≈ без змін)" in flat
+    assert "no language grows by share" in line({"vi": 2.4, "tr": 0.6}, "en")
+    assert "жодна мова не росте" not in line({"vi": 12.4, "tr": 0.6})            # one really grows
+    falling = line({"vi": -2.4, "tr": -20.1})
+    assert "жодна мова не росте" in falling                                        # nothing grows here either
+
+
+def test_compact_comparison_says_no_language_grows_too():
+    series = _many_series(15)
+    for s in series:
+        s["stats"]["growth_share_pct"] = 3.0
+    analysis = {"ui": "uk", "proxy_for": None, "period": {"start": "2024-01", "end": "2025-12", "months": 24},
+                "topics": [{"topic": "t", "resolved": [], "alternatives": [], "missing_languages": []}],
+                "series": series, "warnings": [], "caveats": []}
+    assert "жодна мова не росте" in interpret.answer_skeleton(Path("runs/x"), analysis, shown=series[:3])
+
+
 def test_table_sorts_by_share_change_even_when_it_is_exactly_zero(series_with):
     # `x or y` treated a 0.0 share change as missing and sorted that row by raw growth instead.
     zero = dict(series_with(growth_pct=50.0, growth_share_pct=0.0), lang="a")
