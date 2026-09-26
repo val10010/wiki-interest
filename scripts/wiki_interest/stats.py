@@ -122,6 +122,22 @@ def window_growth(v: np.ndarray) -> dict:
             "months_up_yoy": None, "months_compared": None, "seasonality_controlled": False}
 
 
+def months_up_points(wins: int, growth_pct: float | None) -> tuple[int, str | None]:
+    """Consistency points: only months that agree with the sign of the change count.
+    Up: >= 9 of 12 months above last year -> 2, 7-8 -> 1. Down: <= 3 -> 2, 4-5 -> 1."""
+    up = growth_pct is None or growth_pct >= 0
+    agree = wins if up else 12 - wins
+    if agree >= 9:
+        return 2, None
+    if agree >= 7:
+        return 1, f"mixed month-by-month picture ({wins}/12 months above last year)"
+    if agree >= 6:
+        return 0, f"inconsistent: {wins}/12 months above last year"
+    return 0, (f"months disagree with the change: {wins}/12 months above last year, "
+               f"but the change is {growth_pct:+.1f}%" if growth_pct is not None else
+               f"inconsistent: {wins}/12 months above last year")
+
+
 def direction(growth_pct: float | None, trend_annual_pct: float, p: float) -> str:
     """growing / declining need >= 10 % change, a trend of the same sign and p < TREND_P."""
     if growth_pct is None:
@@ -207,12 +223,10 @@ def analyze_series(months: list[str], views: list[int], project_total: list[int]
 
     wins = out["months_up_yoy"]
     if wins is not None:
-        if wins >= 9 or wins <= 3:
-            score += 2
-        elif wins >= 7 or wins <= 5:
-            score += 1; reasons.append(f"mixed month-by-month picture ({wins}/12 months above last year)")
-        else:
-            reasons.append(f"inconsistent: {wins}/12 months above last year")
+        pts, why = months_up_points(wins, out["growth_pct"])
+        score += pts
+        if why:
+            reasons.append(why)
     else:
         reasons.append("under 24 months: seasonality not controlled")
 

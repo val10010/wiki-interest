@@ -116,3 +116,18 @@ def test_outlier_on_top_of_a_seasonal_peak_is_cut_to_the_seasonal_level():
     excess = [x for x in s["spikes"] if x.get("seasonal_excess")]
     assert [x["month"] for x in excess] == [MONTHS[20]] and excess[0]["kept"] < 35000
     assert MONTHS[20] in [p["month"] for p in s["seasonal_peaks"]]   # the seasonal part is still a peak
+
+
+def test_months_up_points_follow_the_sign_of_growth():
+    _score_parts = stats.months_up_points
+    assert _score_parts(10, 12.0)[0] == 2 and _score_parts(7, 12.0)[0] == 1 and _score_parts(6, 12.0)[0] == 0
+    assert _score_parts(2, -12.0)[0] == 2 and _score_parts(5, -12.0)[0] == 1 and _score_parts(6, -12.0)[0] == 0
+    pts, reason = _score_parts(1, 5.0)                      # growth up, but 11 of 12 months below last year
+    assert pts == 0 and "disagree" in reason
+    assert _score_parts(10, -12.0)[0] == 0
+
+
+def test_series_b_gets_no_consistency_points():
+    s = stats.analyze_series(MONTHS, _outlier_on_seasonal_peak(), FLAT_WIKI)
+    assert s["months_up_yoy"] == 1
+    assert any("1/12" in r and "disagree" in r for r in s["reasons"])
