@@ -15,6 +15,8 @@ SEASONAL_RATIO = 1.5   # same month a year apart this elevated -> seasonal peak,
 LOW_VOLUME = 3000      # median monthly views below this -> "low volume"
 VERY_LOW_VOLUME = 300
 TREND_P = 0.05        # growing/declining needs a significant trend; 0.2 gave ~11 % false "growing" (calibration)
+MIN_MONTHS = 6        # fewer months -> "no data"
+GAP_RATIO = 0.05      # leading months below this x the later median: the title did not exist yet (created / renamed)
 
 
 def _pct(new: float, old: float) -> float | None:
@@ -80,6 +82,22 @@ def split_seasonal(v: np.ndarray, mask: np.ndarray, base: np.ndarray) -> tuple[n
     return mask & ~seasonal, seasonal
 
 
+def leading_gap(views) -> int:
+    """Number of leading months before the title really existed: zeros, then a redirect's trickle
+    (every month < GAP_RATIO x the median of the months after it). Such months are not data but the
+    article's creation or rename; counting them turns any flat topic into "growth". The split is the
+    latest one that still leaves MIN_MONTHS after it, so a late spike cannot pass for a gap."""
+    v = np.asarray(views, dtype=float)
+    nz = np.flatnonzero(v > 0)
+    if not len(nz):
+        return 0
+    k0 = int(nz[0])
+    for k in range(len(v) - MIN_MONTHS, k0, -1):
+        if v[k0:k].max() < GAP_RATIO * np.median(v[k:]):
+            return k
+    return k0
+
+
 def window_growth(v: np.ndarray) -> dict:
     """Recent vs previous period. With >=24 months: last 12 vs previous 12
     (same calendar months -> seasonality cancels). Otherwise halves."""
@@ -107,20 +125,30 @@ def direction(growth_pct: float | None, trend_annual_pct: float, p: float) -> st
 
 
 def analyze_series(months: list[str], views: list[int], project_total: list[int] | None) -> dict:
-    v = np.array(views, dtype=float)
+    full = np.array(views, dtype=float)
+    lead = leading_gap(full)
+    # Statistics use only the months in which the title existed; the chart still gets the whole period.
+    v, months = full[lead:], months[lead:]
+    if project_total is not None:
+        project_total = project_total[lead:]
     n = len(v)
-    out: dict = {"months": n, "total_views": int(v.sum()),
+    out: dict = {"months": n, "total_views": int(full.sum()),
                  "median_monthly": int(np.median(v)) if n else 0,
                  "last_month": int(v[-1]) if n else 0}
-    if n < 6 or v.sum() == 0:
+    gap_reason = None
+    if lead:
+        out["data_start"], out["gap_months"] = months[0], lead
+        gap_reason = (f"no views before {months[0]} (article created or renamed then): "
+                      f"statistics use only the last {n} of {n + lead} months")
+    if n < MIN_MONTHS or v.sum() == 0:
         out.update({"direction": "no data", "reliability": "low", "score": 0,
-                    "reasons": ["fewer than 6 months of data or zero views"]})
+                    "reasons": ["fewer than 6 months of data or zero views"] + ([gap_reason] if gap_reason else [])})
         return out
 
     spikes, base = detect_spikes(v)
     spikes, seasonal = split_seasonal(v, spikes, base)
     clean = np.where(spikes, base, v)
-    out["_clean"] = [int(x) for x in clean]
+    out["_clean"] = [int(x) for x in full[:lead]] + [int(x) for x in clean]
     out["spikes"] = [{"month": months[k], "views": int(v[k]), "x_baseline": round(v[k] / max(base[k], 1), 1)}
                      for k in np.where(spikes)[0]]
     out["seasonal_peaks"] = [{"month": months[k], "views": int(v[k]), "x_baseline": round(v[k] / max(base[k], 1), 1)}
@@ -193,18 +221,31 @@ def analyze_series(months: list[str], views: list[int], project_total: list[int]
     if n >= 24:
         score += 1
 
+    if gap_reason:
+        reasons.append(gap_reason)
+
     out["score"] = score
     level = "high" if score >= 8 else "medium" if score >= 5 else "low"
-    # Hard caps: too few views means percentages are noise, whatever else says.
+    # Hard caps: too few views means percentages are noise, whatever else says; a series that starts
+    # inside the period (new or renamed article) has no year-ago months to compare with.
+    caps = []
+    if med < VERY_LOW_VOLUME:
+        caps.append(("low", "volume", f"median {med} < {VERY_LOW_VOLUME} views/month"))
+    elif med < LOW_VOLUME:
+        caps.append(("medium", "volume", f"median {med} < {LOW_VOLUME} views/month"))
+    if lead:
+        caps.append(("low" if n < 12 else "medium", "gap",
+                     f"data only since {months[0]} ({n} of {n + lead} months)"))
+    rank = {"low": 0, "medium": 1, "high": 2}
+    applied = [c for c in caps if rank[c[0]] < rank[level]]
     cap = None
-    if med < VERY_LOW_VOLUME and level != "low":
-        level, cap = "low", f"capped at low: median {med} < {VERY_LOW_VOLUME} views/month"
-    elif med < LOW_VOLUME and level == "high":
-        level, cap = "medium", f"capped at medium: median {med} < {LOW_VOLUME} views/month"
-    if cap:
+    if applied:
+        level = min((c[0] for c in applied), key=rank.get)
+        cap = f"capped at {level}: " + "; ".join(c[2] for c in applied)
         reasons.append(f"reliability {cap} (score alone would give more)")
     out["reliability"] = level
     out["reliability_cap"] = cap
+    out["cap_kinds"] = [c[1] for c in applied]
     out["direction"] = direction(g, out["trend_annual_pct"], p)
     out["reasons"] = reasons
     return out

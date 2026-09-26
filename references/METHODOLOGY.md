@@ -10,6 +10,14 @@
 
 ## Per-series statistics (`scripts/wiki_interest/stats.py`)
 
+0. **New or renamed article.** Leading months in which the title did not exist yet are not data: leading zeros, and
+   then a prefix whose every month is < 5 % of the median of the months after it (before a rename the new title is
+   usually a redirect with a handful of views). The split is the latest one that leaves ≥ 6 months after it, so a
+   late spike cannot pass for a gap. Counting such months turned a flat topic into "+191 %, high reliability".
+   When `analyze` finds such a gap it adds the article's redirects automatically (after a rename the old title
+   becomes a redirect): if the gap disappears, the sum is used and the output says so (`RENAMED` warning, verdict,
+   PDF caveat). If it stays, all statistics use only the months from `data_start` on, the reliability is capped
+   (medium; low with < 12 real months) and a `SHORT SERIES` warning gives the command to add an older title.
 1. **Spike detection.** log(views) is compared to a centred 5-month rolling median. A month is a spike if its robust z-score (residual / 1.4826·MAD) > 3.5 **and** it is ≥ 1.8× the local median. Spikes are replaced by the rolling median (the "clean" series). They are reported, not hidden.
    **Seasonal peaks are not spikes:** if the same calendar month one year earlier or later is also ≥ 1.5× its own baseline, the peak is recurring (school start, New-year diets). It is reported as `seasonal_peaks` and kept in the data, because the year-over-year comparison already cancels it. Needs ≥ 13 months to see the repeat. A one-off event that happens to hit the same month twice would be misread as seasonal.
 2. **Growth (headline).** Mean of the last 12 months vs the previous 12 months on the clean series. Same calendar months are compared, so seasonality (January diets, September school start) cancels. With < 24 months the halves are compared and a caveat is added.
@@ -29,7 +37,8 @@
 | normalisation agrees with raw growth direction | 0–1 |
 | ≥ 24 months of data | 0–1 |
 
-≥ 8 → high, 5–7 → medium, else low. **Caps:** median < 300 views/mo → always low. Median < 3000 → at most medium. A cap is stored in `reliability_cap`, shown in the table as `(…, volume cap)` and explained in `reasons`, so "low (8/10)" is never left unexplained. Every lost point adds a human-readable reason.
+≥ 8 → high, 5–7 → medium, else low. **Caps:** median < 300 views/mo → always low. Median < 3000 → at most medium.
+A series that starts inside the period (see step 0) → at most medium, low with < 12 real months. A cap is stored in `reliability_cap`, shown in the table as `(…, volume cap)` and explained in `reasons`, so "low (8/10)" is never left unexplained. Every lost point adds a human-readable reason.
 
 **Direction:** `growing` if clean growth ≥ +10 %, trend > 0 and p < 0.05 (calibrated, see below; p < 0.2 was used before). `declining` is the mirror case. `flat` if |growth| < 10 %. Otherwise `unclear`. The table prints p with three decimals and `<0.001` below that.
 
@@ -95,6 +104,8 @@ aggregates monthly and daily totals separately; negligible next to the ±10 % th
 - Views measure curiosity or information need, not purchase intent. Students doing homework, news readers and professionals all look the same.
 - Language ≠ country. Many readers use English Wikipedia. Ukrainian readers were split between uk and ru editions, with a strong shift to uk after 2022, so uk growth partly reflects language switching. Compare with the edition total (`rel. change`) and consider checking `ru` as well.
 - One article ≠ one topic. Use `A+B` to sum related articles and `--include-redirects` to add redirect views (up to 30 redirects per article).
-- Article renames or creation inside the period produce zeros at the start. This is flagged as "no views before …".
+- Article renames or creation inside the period: the redirect check finds the old title only if it is still a
+  redirect to the article (up to 30 redirects). A topic that truly grew more than 20× from almost nothing is
+  indistinguishable from a new article and is analysed from the month it became visible, which is conservative.
 - `agent=user` still contains some undetected bots. Spike filtering removes the most obvious cases. Sustained bot traffic is not detected.
 - Mann–Kendall p-values are approximate (autocorrelation, n = 24); see Calibration for the resulting false-trend rate.

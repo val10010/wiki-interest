@@ -151,3 +151,30 @@ def test_report_output_tells_what_did_not_fit(analyze, capsys):
     out = json.loads(capsys.readouterr().out)
     assert out["conclusion_truncated"] and "shorten --conclusion" in out["hint"]
     assert out["series_shown"] == out["series_total"] == 1 and "note" not in out
+
+
+# ------------------------------------------------------------------ renamed / new articles (README, iteration 7)
+def test_renamed_article_gap_is_closed_by_its_redirect(analyze):
+    # ro: 'Post intermitent' was renamed from 'Post alimentar intermitent' in 2024-05; the old title is a redirect.
+    out = analyze("--langs", "pl,ro")
+    a = json.loads((Path(out["run_dir"]) / "analysis.json").read_text())
+    ro = next(s for s in a["series"] if s["lang"] == "ro")
+    assert ro["rename_fix"] == {"views_start": "2024-05", "redirects": 1, "closed": True}
+    assert "data_start" not in ro["stats"] and ro["stats"]["direction"] == "flat"
+    assert any(w.startswith("RENAMED ro") for w in out["warnings"])
+    assert any("перейменовано" in v for v in out["verdicts"] if v.startswith("ro"))
+
+
+def test_new_article_is_analysed_from_its_first_month_only(analyze, monkeypatch):
+    # hu: the article exists only since 2024-03 and has no redirects -> the gap stays.
+    out = analyze("--langs", "pl,hu")
+    a = json.loads((Path(out["run_dir"]) / "analysis.json").read_text())
+    hu = next(s for s in a["series"] if s["lang"] == "hu")
+    assert hu["stats"]["data_start"] == "2024-03" and hu["stats"]["direction"] != "growing"
+    assert hu["stats"]["reliability"] != "high" and hu["rename_fix"]["closed"] is False
+    assert any(w.startswith("SHORT SERIES hu") and "--article" in w for w in out["warnings"])
+    assert any("лише з 2024-03" in v for v in out["verdicts"] if v.startswith("hu"))
+    seen = {}
+    monkeypatch.setattr(report, "save_pdf", lambda a, path, title, concl, caveats, ui: seen.update(c=caveats) or FIT)
+    cli.main(["report", out["run_dir"], "--conclusion", "x"])
+    assert any(c.startswith("Неповний ряд (hu)") for c in seen["c"])

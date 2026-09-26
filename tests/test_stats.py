@@ -70,3 +70,33 @@ def test_direction_needs_significant_trend():
     assert stats.direction(-15.0, -12.0, 0.10) == "unclear"
     assert stats.direction(5.0, 12.0, 0.01) == "flat"
     assert stats.direction(None, 0.0, 0.5) == "unclear"
+
+
+# ------------------------------------------------------------------ review fixes (README, iteration 7)
+def _renamed():
+    """Flat ~20k/month article renamed in month 9: the new title had no views before (review repro, series A)."""
+    rng = np.random.default_rng(1)
+    v = (20000 * np.exp(rng.normal(0, .1, 24))).astype(int)
+    v[:8] = 0
+    return [int(x) for x in v]
+
+
+def test_leading_gap_counts_zeros_and_redirect_trickle():
+    assert stats.leading_gap([0, 0, 0] + [1000] * 10) == 3
+    assert stats.leading_gap([3, 7, 40] + [1000] * 10) == 3        # < 5 % of the later median: a redirect's trickle
+    assert stats.leading_gap([60] + [1000] * 10) == 0               # 6 %: a real (small) month
+    assert stats.leading_gap([1000] * 12) == 0
+
+
+def test_renamed_article_is_not_growth():
+    s = stats.analyze_series(MONTHS, _renamed(), FLAT_WIKI)
+    assert s["direction"] != "growing" and s["reliability"] != "high"
+    assert s["data_start"] == MONTHS[8] and s["gap_months"] == 8
+    assert any(MONTHS[8] in r and "renamed" in r for r in s["reasons"])
+    assert len(s["_clean"]) == 24                                  # chart still gets the whole period
+
+
+def test_short_remainder_after_a_gap_is_capped_at_low():
+    v = [0] * 14 + [int(5000 * 1.5 ** (k / 12)) for k in range(10)]  # a clean trend, but only 10 real months
+    s = stats.analyze_series(MONTHS, v, FLAT_WIKI)
+    assert s["reliability"] == "low" and s["cap_kinds"] == ["gap"] and "since" in s["reliability_cap"]

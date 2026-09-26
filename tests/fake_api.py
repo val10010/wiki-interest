@@ -6,6 +6,8 @@ Synthetic series per language (monthly, with seasonality):
   uk: tiny volume, noisy               -> expect low reliability
   en: slow decline                     -> expect declining
   sk: flat, NOT linked in Wikidata     -> reachable only via --article sk:Title
+  ro: flat, renamed in 2024-05; the old title is a redirect -> gap closed by adding redirects
+  hu: flat, article created in 2024-03, no redirects         -> gap stays, stats from 2024-03 only
 """
 import math
 import re
@@ -15,7 +17,11 @@ import numpy as np
 
 LABELS = {"Q777": "fasting"}
 SITELINKS = {"plwiki": "Post przerywany", "cswiki": "Přerušovaný půst",
-             "ukwiki": "Інтервальне голодування", "enwiki": "Intermittent fasting"}
+             "ukwiki": "Інтервальне голодування", "enwiki": "Intermittent fasting",
+             "rowiki": "Post intermitent", "huwiki": "Időszakos böjt"}
+REDIRECTS = {"Post intermitent": ["Post alimentar intermitent"]}   # old title, now a redirect
+RENAMED = (2024, 5)         # ro: views move from the old title to the new one this month
+CREATED = (2024, 3)         # hu: the article exists from this month on
 
 
 def _months(a: str, b: str):
@@ -32,10 +38,10 @@ def _months(a: str, b: str):
 
 ORIGIN = (2023, 9)          # k = 0 here; tests analyse 2023-09 .. 2025-08
 SPIKE_MONTH = (2025, 4)     # cs viral spike (5th month from the end of that window)
-SEEDS = {"pl": 1, "cs": 2, "uk": 3, "en": 4, "sk": 5}
+SEEDS = {"pl": 1, "cs": 2, "uk": 3, "en": 4, "sk": 5, "ro": 6, "hu": 7}
 
 
-def _value(lang: str, y: int, m: int) -> int:
+def _value(lang: str, y: int, m: int, title: str = "") -> int:
     """Views for one calendar month: a function of the date, not of the fetched range,
     so the same month has the same value whichever range the client asks for."""
     k = (y - ORIGIN[0]) * 12 + (m - ORIGIN[1])
@@ -51,13 +57,18 @@ def _value(lang: str, y: int, m: int) -> int:
         v = 2000 * season * rng.normal(1, 0.05)
     elif lang == "uk":
         v = 60 * season * rng.normal(1, 0.35)
+    elif lang == "ro":
+        before = (y, m) < RENAMED
+        v = 3000 * season * rng.normal(1, 0.05) if before == (title != "Post intermitent") else 4  # redirect trickle
+    elif lang == "hu":
+        v = 2500 * season * rng.normal(1, 0.05) if (y, m) >= CREATED else 0
     else:
         v = 90000 * (0.85 ** (k / 12)) * season * rng.normal(1, 0.03)
     return max(int(v), 0)
 
 
-def _series(lang: str, months):
-    return [_value(lang, y, m) for y, m in months]
+def _series(lang: str, months, title: str = ""):
+    return [_value(lang, y, m, title) for y, m in months]
 
 
 def fake_get_json(url, params=None, ttl=None, retries=3):
@@ -81,13 +92,13 @@ def fake_get_json(url, params=None, ttl=None, retries=3):
         return {"query": {"pages": [{"title": title, "pageprops": {"wikibase_item": qid},
                                      "description": "religious practice" if qid == "Q777" else "diet"}]}}
     if url.endswith("/w/api.php") and params.get("prop") == "redirects":
-        return {"query": {"pages": [{"redirects": []}]}}
-    m = re.search(r"per-article/(\w+)\.wikipedia/.+?/(.+)/monthly/(\d{10})/(\d{10})", url)
+        return {"query": {"pages": [{"redirects": [{"title": t} for t in REDIRECTS.get(params["titles"], [])]}]}}
+    m = re.search(r"per-article/(\w+)\.wikipedia/[^/]+/[^/]+/(.+)/monthly/(\d{10})/(\d{10})", url)
     if m:
-        lang, _, a, b = m.groups()
+        lang, title, a, b = m.groups()
         ms = _months(a, b)
         return {"items": [{"timestamp": f"{y}{mo:02d}0100", "views": v}
-                          for (y, mo), v in zip(ms, _series(lang, ms))]}
+                          for (y, mo), v in zip(ms, _series(lang, ms, unquote(title).replace("_", " ")))]}
     m = re.search(r"aggregate/(\w+)\.wikipedia/.+?/monthly/(\d{10})/(\d{10})", url)
     if m:
         ms = _months(m.group(2), m.group(3))

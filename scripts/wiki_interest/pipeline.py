@@ -137,16 +137,27 @@ def build_analysis(topics: list[str], articles: dict[str, list[str]], langs_spec
                 if any(i["qid"] not in topic_qids for i in infos):
                     proxy = infos
             total, n_redirects = _series_views(lang, titles, start, end, months, include_redirects)
+            rename_fix = None
+            lead = stats.leading_gap(total)
+            if lead:
+                # No views before some month: the article was created or renamed then. After a rename the
+                # old title is a redirect, so its views fill the gap; if they do, use the sum.
+                if not include_redirects:
+                    with_r, n_r = _series_views(lang, titles, start, end, months, True)
+                    closed = n_r > 0 and stats.leading_gap(with_r) == 0
+                    if closed:
+                        total, n_redirects = with_r, n_r
+                else:
+                    n_r, closed = n_redirects, False
+                rename_fix = {"views_start": months[lead], "redirects": n_r, "closed": closed}
             if lang not in project_cache:
                 pv = wiki.project_views(lang, start, end)
                 project_cache[lang] = [pv[m] for m in months]
             st = stats.analyze_series(months, total, project_cache[lang])
             clean = st.pop("_clean", total)
-            lead = next((i for i, x in enumerate(total) if x > 0), len(total))
-            if 0 < lead < len(total):
-                st["reasons"].append(f"no views before {months[lead]} (article created or renamed then)")
             series.append({"id": f"{slug(r['topic'])}|{lang}", "topic": r["topic"], "lang": lang,
-                           "title": " + ".join(titles), "proxy": proxy, "redirects_included": n_redirects,
+                           "title": " + ".join(titles), "titles": list(titles), "proxy": proxy,
+                           "redirects_included": n_redirects, "rename_fix": rename_fix,
                            "multi_topic": multi, "months": months, "views": total, "views_clean": clean,
                            "project_total": project_cache[lang], "stats": st})
 

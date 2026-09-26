@@ -62,3 +62,13 @@ def test_table_sorts_by_share_change_even_when_it_is_exactly_zero(series_with):
 def test_table_shows_tiny_p_values_as_a_bound(series_with):
     assert "<0.001" in interpret.table_md([series_with(trend_p_value=0.0)])
     assert "| 0.031 |" in interpret.table_md([series_with(trend_p_value=0.0312)])
+
+
+def test_short_series_is_named_in_verdict_and_warning(series_with):
+    s = dict(series_with(direction="flat", data_start="2024-05", gap_months=8, months=16, reliability="medium",
+                         reliability_cap="capped at medium: …", cap_kinds=["gap"]), titles=["T"], id="t|pl")
+    assert "лише з 2024-05" in interpret.verdict(s, "uk")
+    assert "only since 2024-05" in interpret.verdict(s, "en")
+    w = " ".join(interpret.build_warnings([{"topic": "t", "missing_languages": []}], [s]))
+    assert "2024-05" in w and '--article "pl:T" --article "pl:<old title>"' in w
+    assert "(обмежено неповним рядом)" in interpret.verdict(s, "uk")                       # cap reason is not "low volume"

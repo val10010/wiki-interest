@@ -34,7 +34,10 @@ VERDICT = {
            "level": {"high": "висока", "medium": "середня", "low": "низька"},
            "body": "{dir}. Зміна {g}, частка в трафіку розділу {rel}, тренд {t}/рік; {med} переглядів/міс; "
                    "надійність {level}{cap}.",
-           "cap": " (обмежено малим обсягом)",
+           "cap": {"volume": "малим обсягом", "gap": "неповним рядом"}, "cap_fmt": " (обмежено {k})", "and": " і ",
+           "gap": " Дані лише з {m} (стаття створена або перейменована тоді): статистику пораховано за {n} міс., "
+                  "без порівняння з тими самими місяцями рік тому.",
+           "renamed": " Статтю перейменовано: до {m} враховано перегляди старої назви (редиректу), ряд безперервний.",
            "share_flat": " Частка теми майже не змінилась: зміна переглядів — це зміна трафіку всього розділу.",
            "share_up": " Перегляди падають, але частка теми в розділі зростає.",
            "share_down": " Перегляди ростуть, але частка теми в розділі падає.",
@@ -46,7 +49,11 @@ VERDICT = {
            "level": {"high": "high", "medium": "medium", "low": "low"},
            "body": "{dir}. Change {g}, share of edition traffic {rel}, trend {t}/yr; {med} views/month; "
                    "reliability {level}{cap}.",
-           "cap": " (capped by low volume)",
+           "cap": {"volume": "low volume", "gap": "an incomplete series"}, "cap_fmt": " (capped by {k})", "and": " and ",
+           "gap": " Data only since {m} (article created or renamed then): statistics cover {n} months, "
+                  "without a same-months-last-year comparison.",
+           "renamed": " The article was renamed: before {m} views of the old title (a redirect) are counted, "
+                      "so the series is continuous.",
            "share_flat": " The topic's share barely moved: the change in views is edition-wide traffic.",
            "share_up": " Views fall, but the topic's share of the edition grows.",
            "share_down": " Views grow, but the topic's share of the edition falls.",
@@ -132,6 +139,21 @@ def build_warnings(topics_out: list[dict], series: list[dict]) -> list[str]:
                        "different things. Say this in the answer; the PDF report adds it automatically. "
                        "Look at seasonal_peaks: peaks that fit the proxy but not the topic (e.g. religious "
                        "holidays) confirm the mismatch.")
+    for s in series:
+        fix, st = s.get("rename_fix") or {}, s["stats"]
+        if fix.get("closed"):
+            out.append(f"RENAMED {s['lang']}: '{s['title']}' had no views before {fix['views_start']} (renamed then). "
+                       f"Views of its {fix['redirects']} redirect(s), including the old title, were added "
+                       "automatically and close the gap; the verdict says so. No action needed.")
+        elif st.get("data_start"):
+            titles = s.get("titles") or [s["title"]]
+            add = " ".join(f'--article "{s["lang"]}:{t}"' for t in titles)
+            out.append(f"SHORT SERIES {s['lang']}: '{s['title']}' has (almost) no views before {st['data_start']}: "
+                       f"the article was created or renamed then, and its redirects do not fill the gap. Statistics "
+                       f"use only {st['data_start']} onwards ({st.get('months')} months) and reliability is capped; "
+                       f"the verdict says so, quote it. If the article had an older title, rerun the same command "
+                       f'with {add} --article "{s["lang"]}:<old title>" (titles of one language are summed); '
+                       f"otherwise tell the user that {s['lang']} has data only since {st['data_start']}.")
     thin = [s for s in series if (s["stats"].get("median_monthly") or 0) < stats.VERY_LOW_VOLUME]
     if thin and len(thin) * 2 >= len(series):
         names = ", ".join(f"{s['topic']} · {s['lang']}" for s in thin)
@@ -144,6 +166,13 @@ def build_warnings(topics_out: list[dict], series: list[dict]) -> list[str]:
 
 
 # ---------------------------------------------------------------- verdicts + skeleton
+def _cap_txt(st: dict, v: dict) -> str:
+    if not st.get("reliability_cap"):
+        return ""
+    kinds = st.get("cap_kinds") or ["volume"]  # runs saved before cap kinds existed had only the volume cap
+    return v["cap_fmt"].format(k=v["and"].join(v["cap"][k] for k in kinds))
+
+
 def verdict(s: dict, ui: str) -> str:
     """One quotable sentence per series, so the model never has to phrase the
     direction, the numbers or the caveats itself (weak models get these wrong)."""
@@ -152,12 +181,16 @@ def verdict(s: dict, ui: str) -> str:
     text = f"{s['lang']} · «{s['title']}»: " + v["body"].format(
         dir=v[st.get("direction", "no data")], g=_pct_txt(g), rel=_pct_txt(rel),
         t=_pct_txt(st.get("trend_annual_pct")), med=st.get("median_monthly"),
-        level=v["level"].get(st.get("reliability"), "—"), cap=v["cap"] if st.get("reliability_cap") else "")
+        level=v["level"].get(st.get("reliability"), "—"), cap=_cap_txt(st, v))
     if g is not None and rel is not None and abs(g) >= 10:
         if abs(rel) < 10:
             text += v["share_flat"]
         elif (g < 0) != (rel < 0):
             text += v["share_up"] if g < 0 else v["share_down"]
+    if st.get("data_start"):
+        text += v["gap"].format(m=st["data_start"], n=st.get("months"))
+    elif (s.get("rename_fix") or {}).get("closed"):
+        text += v["renamed"].format(m=s["rename_fix"]["views_start"])
     if st.get("seasonal_peaks"):
         text += v["seasonal"].format(m=", ".join(p["month"] for p in st["seasonal_peaks"]))
     if st.get("spikes"):
@@ -208,8 +241,12 @@ def answer_skeleton(run_dir: Path, analysis: dict) -> str:
 def _reliability_cell(st: dict) -> str:
     cell = f"{st.get('reliability')} ({st.get('score')}/10"
     if st.get("reliability_cap"):
-        cell += ", volume cap"
+        cell += ", " + "+".join(st.get("cap_kinds") or ["volume"]) + " cap"
     return cell + ")"
+
+
+def _months_up_txt(st: dict) -> str:
+    return "—" if st.get("months_up_yoy") is None else f"{st['months_up_yoy']}/12"
 
 
 def table_md(series: list[dict]) -> str:
@@ -220,7 +257,7 @@ def table_md(series: list[dict]) -> str:
         title = s["title"] + (" [proxy]" if s.get("proxy") else "")
         rows.append(f"| {s['topic']} · {s['lang']} | {title} | {st.get('median_monthly')} | {st.get('growth_pct')} | "
                     f"{st.get('growth_share_pct')} | {st.get('trend_annual_pct')} | {_p_txt(st.get('trend_p_value'))} | "
-                    f"{st.get('months_up_yoy')}/12 | {_reliability_cell(st)} | {st.get('direction')} |")
+                    f"{_months_up_txt(st)} | {_reliability_cell(st)} | {st.get('direction')} |")
     return "\n".join(rows)
 
 
@@ -255,6 +292,18 @@ def report_caveats(analysis: dict, ui: str, extra: list[str] | None = None) -> l
                                "тему; порівняння з іншими мовами міряє різні поняття." if ui == "uk" else
                                f"Proxy ({s['lang']}): '{s['title']}' is about '{proxy_label(s)}', not the topic "
                                "itself; comparing it with other languages compares different concepts."))
+    for s in analysis["series"]:
+        ds, fix = s["stats"].get("data_start"), s.get("rename_fix") or {}
+        if ds:
+            caveats.insert(0, (f"Неповний ряд ({s['lang']}): «{s['title']}» не має переглядів до {ds} (стаття створена "
+                               f"або перейменована); статистику пораховано лише з {ds}." if ui == "uk" else
+                               f"Incomplete series ({s['lang']}): '{s['title']}' has no views before {ds} (article "
+                               f"created or renamed); statistics use {ds} onwards only."))
+        elif fix.get("closed"):
+            caveats.insert(0, (f"Перейменування ({s['lang']}): до {fix['views_start']} враховано перегляди старої назви "
+                               "(редиректу)." if ui == "uk" else
+                               f"Rename ({s['lang']}): before {fix['views_start']} views of the old title (a redirect) "
+                               "are counted."))
     low = [f"{s['topic']} · {s['lang']}" for s in analysis["series"] if s["stats"].get("reliability") == "low"]
     if low:
         caveats.insert(0, ("Низька надійність даних: " if ui == "uk" else "Low reliability: ") + ", ".join(low))

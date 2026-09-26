@@ -104,8 +104,9 @@ def draw_panels(ax_abs, ax_idx, series, ui):
         vc = np.array(s.get("views_clean") or s["views"], float)
         if len(t) == len(v) and t.min() > 0:
             share = vc / t
-            k0 = min(12, len(share))
-            base = share[:k0].mean()
+            ds = s["stats"].get("data_start")  # a new / renamed article: index from its first real month
+            first = s["months"].index(ds) if ds in s["months"] else 0
+            base = share[first:first + 12].mean()
             if base > 0:
                 ax_idx.plot(d, share / base * 100, color=c, lw=1.6, label=series_label(s))
     ax_abs.set_yscale("log")
