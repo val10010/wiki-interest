@@ -138,6 +138,19 @@ def months_up_points(wins: int, growth_pct: float | None) -> tuple[int, str | No
                f"inconsistent: {wins}/12 months above last year")
 
 
+def trend_points(p: float, trend_annual_pct: float, growth_pct: float | None) -> tuple[int, str | None]:
+    """Significance points: p < 0.05 -> 2, p < 0.2 -> 1, but only when the trend points the same way as the
+    change (a significant -1.3 %/yr slope next to a +5 % change is a contradiction, not evidence)."""
+    if p >= 0.2:
+        return 0, f"no statistically significant monotonic trend (p={p})"
+    if growth_pct is not None and trend_annual_pct != 0 and (trend_annual_pct > 0) != (growth_pct >= 0):
+        return 0, (f"trend ({trend_annual_pct:+.1f}%/yr, p={p}) contradicts the sign of the change "
+                   f"({growth_pct:+.1f}%): no significance points")
+    if p < 0.05:
+        return 2, None
+    return 1, f"trend only weakly significant (Mann-Kendall p={p})"
+
+
 def direction(growth_pct: float | None, trend_annual_pct: float, p: float) -> str:
     """growing / declining need >= 10 % change, a trend of the same sign and p < TREND_P."""
     if growth_pct is None:
@@ -222,12 +235,10 @@ def analyze_series(months: list[str], views: list[int], project_total: list[int]
         reasons.append(f"very low volume (median {med} views/month): percentages are unreliable")
 
     p = out["trend_p_value"]
-    if p < 0.05:
-        score += 2
-    elif p < 0.2:
-        score += 1; reasons.append(f"trend only weakly significant (Mann-Kendall p={p})")
-    else:
-        reasons.append(f"no statistically significant monotonic trend (p={p})")
+    pts, why = trend_points(p, out["trend_annual_pct"], out["growth_pct"])
+    score += pts
+    if why:
+        reasons.append(why)
 
     wins = out["months_up_yoy"]
     if wins is not None:

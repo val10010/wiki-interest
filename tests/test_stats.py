@@ -133,6 +133,23 @@ def test_series_b_gets_no_consistency_points():
     assert any("1/12" in r and "disagree" in r for r in s["reasons"])
 
 
+def test_trend_points_follow_the_sign_of_the_change():
+    # Like months up: a significant trend earns points only when it points the same way as the change.
+    assert stats.trend_points(0.01, 12.0, 30.0) == (2, None) and stats.trend_points(0.01, -12.0, -30.0) == (2, None)
+    assert stats.trend_points(0.1, 12.0, 30.0)[0] == 1 and stats.trend_points(0.5, 12.0, 30.0)[0] == 0
+    pts, why = stats.trend_points(0.01, -1.3, 5.0)
+    assert pts == 0 and "contradict" in why and "-1.3" in why and "+5.0" in why
+    assert stats.trend_points(0.01, 12.0, None) == (2, None)          # no change number: nothing to contradict
+
+
+def test_series_b_gets_no_trend_points_either():
+    # Review: trend -1.3 %/yr at p < 0.05 next to a +5.0 % change still earned 2 points -> "high 8/10".
+    s = stats.analyze_series(MONTHS, _outlier_on_seasonal_peak(), FLAT_WIKI)
+    assert s["trend_annual_pct"] < 0 < s["growth_pct"] and s["trend_p_value"] < 0.05
+    assert s["score"] <= 6 and s["reliability"] == "medium"
+    assert any("contradict" in r and "trend" in r for r in s["reasons"])
+
+
 def test_direction_share_uses_the_share_series():
     # Views fall 20 %/yr exactly with the whole edition: raw says "declining", the share is flat.
     v = [int(20000 * 0.8 ** (k / 12)) for k in range(24)]

@@ -57,8 +57,8 @@ L = {
            "method_txt": ("Зміна = середнє за останні 12 міс. проти попередніх 12 (ті самі календарні місяці, "
                           "сплески замінено ковзною медіаною). Відн. зміна = те саме для частки статті у всіх "
                           "переглядах мовного розділу. Тренд = нахил Тейла–Сена, значущість — тест Манна–Кендалла. "
-                          "Надійність — бал 0–10 із шести складників: обсяг, значущість, узгодженість місяців зі знаком "
-                          "зміни, вплив сплесків, узгодженість із нормалізацією, ≥ 24 міс. даних.")},
+                          "Надійність — бал 0–10 із шести складників: обсяг, значущість тренду і узгодженість місяців (обидва "
+                          "лише в напрямку зміни), вплив сплесків, узгодженість із нормалізацією, ≥ 24 міс. даних.")},
     "en": {"abs": "Monthly views (humans only, log scale)",
            "idx_short": "Relative interest (share of wiki views, spikes removed), index: first 12 months = 100",
            "spike": "anomalous spike", "series": "Topic / language", "article": "Article",
@@ -70,8 +70,8 @@ L = {
            "method_txt": ("Change = mean of last 12 months vs previous 12 (same calendar months, spikes replaced by "
                           "rolling median). Rel. change = same for the article's share of all views of that language "
                           "edition. Trend = Theil–Sen slope, significance = Mann–Kendall test. Reliability = 0–10 "
-                          "score from six components: volume, significance, months agreeing with the sign of the "
-                          "change, spike impact, agreement with normalisation, ≥ 24 months of data.")},
+                          "score from six components: volume, trend significance and months up (both only in the direction of "
+                          "the change), spike impact, agreement with normalisation, ≥ 24 months of data.")},
 }
 
 

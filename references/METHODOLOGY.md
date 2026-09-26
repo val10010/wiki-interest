@@ -25,7 +25,7 @@
 2. **Growth (headline).** Mean of the last 12 months vs the previous 12 months on the clean series. Same calendar months are compared, so seasonality (January diets, September school start) cancels. With < 24 months the halves are compared and a caveat is added.
 3. **Relative growth.** The same comparison on `share`.
 4. **Trend.** Theil–Sen slope of log(views), annualised. Robust to outliers.
-5. **Significance.** Mann–Kendall test on log(clean views). Note: monthly series are autocorrelated, which makes p-values somewhat optimistic. That is why p is only one of six reliability components.
+5. **Significance.** Mann–Kendall test on log(clean views). Note: monthly series are autocorrelated, which makes p-values somewhat optimistic. That is why p is only one of six reliability components. Like consistency (step 6), significance earns points only when the trend's sign agrees with the sign of the change: series B (11 of 12 months −5 %, a 6× outlier on a seasonal peak) had a significant −1.3 %/yr trend next to a +5.0 % change and still scored "high 8/10"; now it is medium 6/10 with the contradiction named in `reasons`.
 6. **Consistency.** Number of the last 12 months that beat the same month a year earlier (`months_up_yoy`). It earns reliability points only when it agrees with the sign of the change: 1 of 12 months up next to "+28 % growth" is a contradiction, not consistency.
 
 ## Reliability score (0–10)
@@ -33,7 +33,7 @@
 | component | points |
 |---|---|
 | volume: median ≥ 3000 views/mo → 2, ≥ 300 → 1 | 0–2 |
-| trend significance: p < 0.05 → 2, p < 0.2 → 1 | 0–2 |
+| trend significance, in the direction of the change: p < 0.05 → 2, p < 0.2 → 1; a trend whose sign contradicts the sign of the change → 0 and a reason | 0–2 |
 | consistency, in the direction of the change: growth ≥ 0 → ≥ 9 of 12 months up → 2, 7–8 → 1; growth < 0 → ≤ 3 → 2, 4–5 → 1; months that contradict the sign of the change → 0 and a reason | 0–2 |
 | spike robustness: spikes < 25 % of views and raw vs clean growth have the same sign | 0–2 |
 | normalisation agrees with raw growth direction (no edition total for some month → 0 and a reason) | 0–1 |
@@ -98,25 +98,27 @@ optional one-off spike. Noise levels are measured, not guessed: the robust s.d. 
 
 | scenario (24 months, 1000 series each) | growing | flat | declining | unclear | reliability high | growing AND high | share: growing / flat / declining |
 |---|---|---|---|---|---|---|---|
-| flat, sigma 0.12 | 6% | 79% | 4% | 11% | 50% | 6% | 6% / 79% / 4% |
-| flat, sigma 0.17 (typical) | 7% | 65% | 8% | 20% | 48% | 7% | 7% / 65% / 8% |
-| flat, sigma 0.25 | 7% | 48% | 9% | 36% | 47% | 7% | 7% / 48% / 9% |
-| flat + one spike x5, sigma 0.17 | 9% | 62% | 6% | 23% | 33% | 9% | 9% / 62% / 6% |
-| +10%/yr, sigma 0.12 | 29% | 48% | 0% | 23% | 73% | 29% | 29% / 48% / 0% |
+| flat, sigma 0.12 | 6% | 79% | 4% | 11% | 49% | 6% | 6% / 79% / 4% |
+| flat, sigma 0.17 (typical) | 7% | 65% | 8% | 20% | 47% | 7% | 7% / 65% / 8% |
+| flat, sigma 0.25 | 7% | 48% | 9% | 36% | 46% | 7% | 7% / 48% / 9% |
+| flat + one spike x5, sigma 0.17 | 9% | 62% | 6% | 23% | 32% | 9% | 9% / 62% / 6% |
+| +10%/yr, sigma 0.12 | 29% | 48% | 0% | 23% | 72% | 29% | 29% / 48% / 0% |
 | +20%/yr, sigma 0.12 | 68% | 14% | 0% | 18% | 94% | 68% | 68% / 14% / 0% |
 | +20%/yr, sigma 0.17 | 59% | 20% | 0% | 21% | 84% | 59% | 59% / 20% / 0% |
 | +50%/yr, sigma 0.17 | 99% | 0% | 0% | 1% | 100% | 99% | 99% / 0% / 0% |
 | -20%/yr, sigma 0.17 | 0% | 12% | 72% | 16% | 91% | 0% | 0% / 12% / 72% |
 | +50%/yr, 150 views/mo, sigma 0.25 | 92% | 1% | 0% | 7% | 0% | 0% | 92% / 1% / 0% |
 | flat, new/renamed: first 8 months 0, sigma 0.17 | 6% | 45% | 6% | 42% | 0% | 0% | 6% / 45% / 6% |
-| flat, 1.8x seasonal peak + one-off x3 on it in year 2, sigma 0.12 | 6% | 48% | 2% | 44% | 31% | 6% | 6% / 48% / 2% |
+| flat, 1.8x seasonal peak + one-off x3 on it in year 2, sigma 0.12 | 6% | 48% | 2% | 44% | 28% | 6% | 6% / 48% / 2% |
 | -20%/yr views with the whole edition -20%/yr, sigma 0.17 | 0% | 16% | 68% | 16% | 82% | 0% | 8% / 60% / 9% |
 
 The last three rows exercise the review fixes (step 0, the seasonal-excess limit, `direction_share`). Before those
 fixes the same seeds gave: new/renamed article → 95 % growing, 100 % high reliability; seasonal peak with a one-off
 on top → 11 % flat, 81 % unclear, 42 % high; the edition-wide decline had no share direction at all. The first ten
 rows barely moved (reliability high −1–2 pp on flat and +20 %/yr series, because consistency points now require the
-months to agree with the sign of the change).
+months to agree with the sign of the change). Requiring the same of the significance points (iteration 8) cost
+another 1 pp of "high" on the flat scenarios and 3 pp (31 % → 28 %) on the seasonal-peak-with-outlier scenario, where
+the outlier pushes the change and the slope in opposite directions; directions did not change at all.
 
 How to read it:
 - **A flat topic is called "growing" in 6–9 % of cases** (was 8–14 % with the earlier p < 0.2), and then with high
