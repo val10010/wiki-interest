@@ -39,10 +39,15 @@ SCENARIOS = [  # (name, annual growth, noise sigma, volume, spike multiplier)
     ("+50%/yr, sigma 0.17", 0.50, 0.17, 5000, None),
     ("-20%/yr, sigma 0.17", -0.20, 0.17, 5000, None),
     ("+50%/yr, 150 views/mo, sigma 0.25", 0.50, 0.25, 150, None),
+    # Review cases (README, iteration 7): each targets one fix in stats.py.
+    ("flat, new/renamed: first 8 months 0, sigma 0.17", 0.00, 0.17, 5000, None, {"gap": 8}),
+    ("flat, 1.8x seasonal peak + one-off x3 on it in year 2, sigma 0.12", 0.00, 0.12, 5000, None,
+     {"seasonal_outlier": 3.0}),
+    ("-20%/yr views with the whole edition -20%/yr, sigma 0.17", -0.20, 0.17, 5000, None, {"edition": -0.20}),
 ]
 
 
-def series(rng, growth, sigma, volume, spike, phi=0.5):
+def series(rng, growth, sigma, volume, spike, phi=0.5, gap=0, seasonal_outlier=None, **_):
     k = np.arange(24)
     season = 1 + 0.15 * np.cos(2 * np.pi * (k - rng.integers(12)) / 12)
     e = np.zeros(24)
@@ -51,24 +56,37 @@ def series(rng, growth, sigma, volume, spike, phi=0.5):
     v = volume * (1 + growth) ** (k / 12) * season * np.exp(e)
     if spike:
         v[rng.integers(12, 24)] *= spike
+    if seasonal_outlier:  # the same month is a 1.8x peak both years; year 2 also gets a one-off on top
+        m = rng.integers(12)
+        v[m] *= 1.8
+        v[m + 12] *= 1.8 * seasonal_outlier
+    v[:gap] = 0  # the title did not exist yet
     return np.maximum(v.round(), 0).astype(int).tolist()
+
+
+def edition(growth):
+    return [int(EDITION[0] * (1 + growth) ** (k / 12)) for k in range(24)]
 
 
 def calibrate(n, seed):
     rng = np.random.default_rng(seed)
     print(f"| scenario (24 months, {n} series each) | growing | flat | declining | unclear | reliability high "
-          "| growing AND high |")
-    print("|---|---|---|---|---|---|---|")
-    for name, growth, sigma, volume, spike in SCENARIOS:
-        dirs, high, growing_high = Counter(), 0, 0
+          "| growing AND high | share: growing / flat / declining |")
+    print("|---|---|---|---|---|---|---|---|")
+    for name, growth, sigma, volume, spike, *extra in SCENARIOS:
+        opts = extra[0] if extra else {}
+        total = edition(opts["edition"]) if "edition" in opts else EDITION
+        dirs, share, high, growing_high = Counter(), Counter(), 0, 0
         for _ in range(n):
-            st = stats.analyze_series(MONTHS, series(rng, growth, sigma, volume, spike), EDITION)
+            st = stats.analyze_series(MONTHS, series(rng, growth, sigma, volume, spike, **opts), total)
             dirs[st["direction"]] += 1
+            share[st.get("direction_share")] += 1  # None before direction_share existed
             high += st["reliability"] == "high"
             growing_high += st["reliability"] == "high" and st["direction"] == "growing"
         pct = lambda c: f"{100 * c / n:.0f}%"  # noqa: E731
+        share_txt = " / ".join(pct(share[d]) for d in ("growing", "flat", "declining")) if share[None] < n else "—"
         print(f"| {name} | {pct(dirs['growing'])} | {pct(dirs['flat'])} | {pct(dirs['declining'])} | "
-              f"{pct(dirs['unclear'])} | {pct(high)} | {pct(growing_high)} |")
+              f"{pct(dirs['unclear'])} | {pct(high)} | {pct(growing_high)} | {share_txt} |")
 
 
 def crosscheck(seed):

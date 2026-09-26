@@ -67,18 +67,27 @@ Synthetic 24-month series with known truth: seasonality with a random phase, aut
 optional one-off spike. Noise levels are measured, not guessed: the robust s.d. of the month-to-month log change of
 15 real articles ranged 0.10–0.47, median 0.17 (large, calm articles ≈ 0.12).
 
-| scenario (24 months, 1000 series each) | growing | flat | declining | unclear | reliability high | growing AND high |
-|---|---|---|---|---|---|---|
-| flat, sigma 0.12 | 6% | 79% | 4% | 11% | 52% | 6% |
-| flat, sigma 0.17 (typical) | 7% | 65% | 8% | 20% | 49% | 7% |
-| flat, sigma 0.25 | 7% | 48% | 9% | 36% | 48% | 7% |
-| flat + one spike x5, sigma 0.17 | 9% | 62% | 6% | 23% | 33% | 9% |
-| +10%/yr, sigma 0.12 | 29% | 48% | 0% | 23% | 74% | 29% |
-| +20%/yr, sigma 0.12 | 68% | 14% | 0% | 18% | 94% | 68% |
-| +20%/yr, sigma 0.17 | 59% | 20% | 0% | 21% | 85% | 59% |
-| +50%/yr, sigma 0.17 | 99% | 0% | 0% | 1% | 100% | 99% |
-| -20%/yr, sigma 0.17 | 0% | 12% | 72% | 16% | 91% | 0% |
-| +50%/yr, 150 views/mo, sigma 0.25 | 92% | 1% | 0% | 7% | 0% | 0% |
+| scenario (24 months, 1000 series each) | growing | flat | declining | unclear | reliability high | growing AND high | share: growing / flat / declining |
+|---|---|---|---|---|---|---|---|
+| flat, sigma 0.12 | 6% | 79% | 4% | 11% | 50% | 6% | 6% / 79% / 4% |
+| flat, sigma 0.17 (typical) | 7% | 65% | 8% | 20% | 48% | 7% | 7% / 65% / 8% |
+| flat, sigma 0.25 | 7% | 48% | 9% | 36% | 47% | 7% | 7% / 48% / 9% |
+| flat + one spike x5, sigma 0.17 | 9% | 62% | 6% | 23% | 33% | 9% | 9% / 62% / 6% |
+| +10%/yr, sigma 0.12 | 29% | 48% | 0% | 23% | 73% | 29% | 29% / 48% / 0% |
+| +20%/yr, sigma 0.12 | 68% | 14% | 0% | 18% | 94% | 68% | 68% / 14% / 0% |
+| +20%/yr, sigma 0.17 | 59% | 20% | 0% | 21% | 84% | 59% | 59% / 20% / 0% |
+| +50%/yr, sigma 0.17 | 99% | 0% | 0% | 1% | 100% | 99% | 99% / 0% / 0% |
+| -20%/yr, sigma 0.17 | 0% | 12% | 72% | 16% | 91% | 0% | 0% / 12% / 72% |
+| +50%/yr, 150 views/mo, sigma 0.25 | 92% | 1% | 0% | 7% | 0% | 0% | 92% / 1% / 0% |
+| flat, new/renamed: first 8 months 0, sigma 0.17 | 6% | 45% | 6% | 42% | 0% | 0% | 6% / 45% / 6% |
+| flat, 1.8x seasonal peak + one-off x3 on it in year 2, sigma 0.12 | 6% | 48% | 2% | 44% | 31% | 6% | 6% / 48% / 2% |
+| -20%/yr views with the whole edition -20%/yr, sigma 0.17 | 0% | 16% | 68% | 16% | 82% | 0% | 8% / 60% / 9% |
+
+The last three rows exercise the review fixes (step 0, the seasonal-excess limit, `direction_share`). Before those
+fixes the same seeds gave: new/renamed article → 95 % growing, 100 % high reliability; seasonal peak with a one-off
+on top → 11 % flat, 81 % unclear, 42 % high; the edition-wide decline had no share direction at all. The first ten
+rows barely moved (reliability high −1–2 pp on flat and +20 %/yr series, because consistency points now require the
+months to agree with the sign of the change).
 
 How to read it:
 - **A flat topic is called "growing" in 6–9 % of cases** (was 8–14 % with the earlier p < 0.2), and then with high
@@ -89,7 +98,13 @@ How to read it:
   costs more than a missed modest trend; the price is sensitivity. A single "growing" verdict stays a hypothesis,
   which the caveats say.
 - Real growth of +20 %/yr is detected in 59–68 % (72–79 % with p < 0.2), +50 %/yr in 99 %. +10 %/yr sits on the
-  ±10 % threshold (29 %). Missed trends mostly land in `unclear` ("the data does not confirm a trend"), not in `flat`.
+  ±10 % threshold (29 %). Missed trends split between `flat` and `unclear`: at +20 %/yr 14–20 % of series are called
+  `flat` and 18–21 % `unclear`; at +10 %/yr almost half (48 %) are called `flat`. So `flat` means "no change beyond
+  ±10 % was measured", not "no growth": modest growth up to ~20 %/yr is often reported as flat.
+- A new or renamed article (8 leading empty months) is never rated high and is called growing only at the noise
+  rate (6 %), against 95 % before the gap handling.
+- `direction_share` separates an edition-wide decline from a loss of interest: with views and the whole edition both
+  −20 %/yr, raw views say `declining` in 68 %, the share is `flat` in 60 % and `declining` in 9 % (the noise rate).
 - A spike ×5 does not create a false trend (spike filter).
 - Low volume works as intended: +50 %/yr at 150 views/month is detected but never rated high.
 - Theil–Sen matches `scipy.stats.theilslopes` exactly; Mann–Kendall p differs from `scipy.stats.kendalltau` by
