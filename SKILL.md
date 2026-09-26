@@ -69,6 +69,8 @@ run the tool and quote its numbers.**
      If the tool then shows a `PROXY` warning, the article is a different concept (rule 3).
    - *low volume* → if the article is a proxy, rerun with a broader one before concluding;
      otherwise the small audience is itself the finding.
+   - *SHORT SERIES* (article created or renamed inside the period) → follow its command; `RENAMED` needs nothing.
+   With many languages only the top series get verdicts ("showing N of M"); the rest are in the file it names.
    Other options: `--article lang:Title` (repeatable) measures an exact article;
    `--include-redirects` adds views of redirects (helps small editions).
 
@@ -105,8 +107,9 @@ run the tool and quote its numbers.**
 | `trend/yr %`, `p` | robust (Theil–Sen) annualised trend and Mann–Kendall p-value (`<0.001` = very strong). p < 0.05 = statistically clear trend. |
 | `months up` | how many of the last 12 months beat the same month a year earlier (12/12 = very consistent). |
 | `median/mo` | typical monthly views = audience size signal. < 300: percentages are noise. |
-| `reliability` | score 0–10 → high / medium / low. Low volume caps it: `low (8/10, volume cap)` means the trend itself is clean but there are too few views to trust percentages. Reasons are in `details[].reasons`. |
+| `reliability` | score 0–10 → high / medium / low. Low volume caps it: `low (8/10, volume cap)` means the trend itself is clean but there are too few views to trust percentages; `gap cap` = the article exists only for part of the period. Reasons are in `details[].reasons`. |
 | `direction` | growing / declining / flat / unclear (unclear = growth number not backed by a significant trend). |
+| `direction (share)` | the same for the share of edition traffic. When it differs, the verdict names both — quote it. |
 
 Decision rules:
 - Say "growing" only if `direction` is `growing`. For `unclear`, say the data does not confirm a trend.

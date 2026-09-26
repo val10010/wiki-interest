@@ -5,7 +5,7 @@
 - **Source:** Wikimedia Pageviews REST API, `agent=user` (automated/spider traffic excluded by Wikimedia), `all-access` (desktop + mobile web + app), monthly granularity. Data exists from July 2015 onwards. The current, incomplete month is never used.
 - **Topic → articles:** full-text search on the chosen Wikipedia returns candidates. Disambiguation pages and items without a Wikidata id are skipped. The Wikidata item's sitelinks give the title in every language, so all languages refer to *the same concept*, not to a translated keyword.
 - **Normalisation:** for each language edition the total monthly views of the whole edition (`aggregate` endpoint) are fetched. `share = article views / edition views`. This removes platform-level effects (e.g. traffic lost to AI answers or search snippets, or a whole edition growing).
-- **Cache:** every HTTP response is stored in `.cache/`. Pageviews are requested in two canonical ranges per article and per edition: the closed history (2015-07 up to three months ago, cached forever) and the recent tail (refreshed after 24 h). Any analysis period is a slice of these, so changing the period costs no requests; the cutoff moves once a month. Files are written to a temp file and renamed, so an interrupted run never leaves a half-written file (which, for the closed history, would be cached forever); a file that does not parse is treated as a miss, deleted and fetched again. Because the cutoff moves, old history files are never read again: `scripts/wi prune-cache` deletes files not written for 62 days (any file the current ranges use is younger).
+- **Cache:** every HTTP response is stored in the cache directory (`.cache/` in the skill root by default, see below). Pageviews are requested in two canonical ranges per article and per edition: the closed history (2015-07 up to three months ago, cached forever) and the recent tail (refreshed after 24 h). Any analysis period is a slice of these, so changing the period costs no requests; the cutoff moves once a month. Files are written to a temp file and renamed, so an interrupted run never leaves a half-written file (which, for the closed history, would be cached forever); a file that does not parse is treated as a miss, deleted and fetched again. Because the cutoff moves, old history files are never read again: `scripts/wi prune-cache` deletes files not written for 62 days (any file the current ranges use is younger).
 - **Where files go:** `.venv`, `.cache/` and `runs/` live in the skill root when it is writable (as before). A read-only root (installed system-wide, mounted read-only) moves the venv and runs to `${XDG_DATA_HOME:-~/.local/share}/wiki-interest` and the cache to `${XDG_CACHE_HOME:-~/.cache}/wiki-interest`, both in `scripts/wi` (venv) and in Python (`paths.data_dirs`). `WIKI_INTEREST_HOME` (venv + runs, cache in its `.cache/`), `WIKI_INTEREST_RUNS` and `WIKI_INTEREST_CACHE` override.
 - **Runs:** each distinct question (topics × languages × period × redirects) is saved to its own `runs/<name>/`. Follow-ups never overwrite earlier results. Re-running the same question replaces its `analysis.json` and deletes the now-stale `report.pdf`.
 
@@ -26,7 +26,7 @@
 3. **Relative growth.** The same comparison on `share`.
 4. **Trend.** Theil–Sen slope of log(views), annualised. Robust to outliers.
 5. **Significance.** Mann–Kendall test on log(clean views). Note: monthly series are autocorrelated, which makes p-values somewhat optimistic. That is why p is only one of six reliability components.
-6. **Consistency.** Number of the last 12 months that beat the same month a year earlier.
+6. **Consistency.** Number of the last 12 months that beat the same month a year earlier (`months_up_yoy`). It earns reliability points only when it agrees with the sign of the change: 1 of 12 months up next to "+28 % growth" is a contradiction, not consistency.
 
 ## Reliability score (0–10)
 
@@ -40,7 +40,7 @@
 | ≥ 24 months of data | 0–1 |
 
 ≥ 8 → high, 5–7 → medium, else low. **Caps:** median < 300 views/mo → always low. Median < 3000 → at most medium.
-A series that starts inside the period (see step 0) → at most medium, low with < 12 real months. A cap is stored in `reliability_cap`, shown in the table as `(…, volume cap)` and explained in `reasons`, so "low (8/10)" is never left unexplained. Every lost point adds a human-readable reason.
+A series that starts inside the period (see step 0) → at most medium, low with < 12 real months. A cap is stored in `reliability_cap` (its kinds in `cap_kinds`), shown in the table as `(…, volume cap)` / `(…, gap cap)`, named in the verdict and explained in `reasons`, so "low (8/10)" is never left unexplained. Every lost point adds a human-readable reason.
 
 **Direction:** `growing` if clean growth ≥ +10 %, trend > 0 and p < 0.05 (calibrated, see below; p < 0.2 was used before). `declining` is the mirror case. `flat` if |growth| < 10 %. Otherwise `unclear`. The table prints p with three decimals and `<0.001` below that.
 
@@ -80,6 +80,7 @@ One A4 page rendered with matplotlib. The table and the charts show at most 10 s
 - the whole topic is a proxy chosen by the agent for an abstract interest ("learning English" → `English language`):
   the code cannot detect this, so `analyze --proxy-for "<real interest>"` records it in `analysis.json`; the data line
   and the limits line of `answer_skeleton` name it, and the PDF gets a mandatory caveat;
+- a series has (almost) no views at the start of the period (step 0) → `RENAMED <lang>` when its redirects closed the gap (no action needed), else `SHORT SERIES <lang>` with the command to add an older title (`--article "lang:<current>" --article "lang:<old title>"`);
 - an article added with `--article` belongs to a different Wikidata item than the topic → `PROXY` warning, `[proxy]` in the table, and a caveat added to the PDF automatically. Example: for "Intermittent fasting" Polish has only `Post` (= fasting). Its seasonal peaks fall in March (Lent), which confirms it measures religious fasting, not the diet.
 
 ## Verdicts
@@ -151,5 +152,9 @@ aggregates monthly and daily totals separately; negligible next to the ±10 % th
 - Article renames or creation inside the period: the redirect check finds the old title only if it is still a
   redirect to the article (up to 30 redirects). A topic that truly grew more than 20× from almost nothing is
   indistinguishable from a new article and is analysed from the month it became visible, which is conservative.
+- The seasonal limit (1.75 × last year's peak ratio) also trims a seasonal peak that genuinely grew faster than the rest of the year; the trimmed part is listed in `spikes`, so it is visible.
+- `flat` means no change beyond ±10 % was measured, not "no growth": with typical noise, growth of +10–20 %/yr is often reported as flat (see Calibration).
+- `direction_share` divides by the edition total, which also moves with the edition's own composition (a large new topic, a bot wave counted as user traffic); a share change is evidence about relative interest, not proof.
+- With many languages `analyze` prints full verdicts only for the top series (see Output size); the rest are in `all_series.md` and `analysis.json`, and the PDF shows 10.
 - `agent=user` still contains some undetected bots. Spike filtering removes the most obvious cases. Sustained bot traffic is not detected.
 - Mann–Kendall p-values are approximate (autocorrelation, n = 24); see Calibration for the resulting false-trend rate.
