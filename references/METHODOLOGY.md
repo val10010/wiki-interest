@@ -104,6 +104,10 @@ For each series the tool writes one sentence (`verdicts`, in the report language
 "≈ no change". When no language reaches +10 %, the line also says so in words ("no language grows by share (all
 changes within ±10 %): vi +2.4% (≈ no change) > …"), because in the Haiku runs of iterations 6 and 9 the mark alone did
 not stop the model from calling the top of the list "the only growing audience" (3 of 8 answers in iteration 9).
+A share change beyond ±10 % whose `direction_share` is `unclear` (trend not significant) is marked "(unconfirmed)" in
+the same line, the verdict adds "the +10.6% share change is not a confirmed growth: the share trend is not significant
+(p=0.551)", and when no language has a confirmed share growth the line opens with "no confirmed growth by share";
+in iteration 10 the model had called exactly such a +10.6 % "a small growth".
 
 
 ## Calibration (`evals/calibrate_stats.py`)

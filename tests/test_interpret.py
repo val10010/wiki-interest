@@ -67,6 +67,29 @@ def test_comparison_line_says_no_language_grows_when_all_are_within_noise(series
     assert "жодна мова не росте" in falling                                        # nothing grows here either
 
 
+def test_unconfirmed_share_change_is_named_in_verdict_and_comparison(series_with):
+    # Iteration 10: pl «Post» had +10.6 % share with direction (share) = unclear (p = 0.55); the answer called it
+    # "a small growth". The number must carry its own caveat wherever the model reads it.
+    pl = dict(series_with(direction="flat", growth_pct=-2.4, growth_share_pct=10.6, direction_share="unclear",
+                          trend_share_p_value=0.551), lang="pl")
+    v = interpret.verdict(pl, "uk")
+    assert "Частка +10.6% — не підтверджений ріст" in v and "p=0.551" in v
+    assert "not a confirmed growth" in interpret.verdict(pl, "en")
+    cs = dict(series_with(direction="declining", growth_pct=-52.7, growth_share_pct=-45.6, direction_share="declining"), lang="cs")
+    analysis = {"ui": "uk", "period": {"start": "2024-01", "end": "2025-12", "months": 24},
+                "topics": [{"topic": "t", "missing_languages": []}], "series": [pl, cs]}
+    line = next(l for l in interpret.answer_skeleton(Path("runs/x"), analysis).split("\n") if "**Обсяг" in l)
+    assert "підтвердженого росту за часткою немає" in line and "pl +10.6% (не підтверджено)" in line
+    assert "жодна мова не росте" not in line                       # +10.6 % is not "within ±10 %"
+    pl["stats"]["direction_share"] = "growing"                      # a confirmed one: no caveats
+    line = next(l for l in interpret.answer_skeleton(Path("runs/x"), analysis).split("\n") if "**Обсяг" in l)
+    assert "не підтверджено" not in line and "росту за часткою немає" not in line
+    assert "не підтверджений ріст" not in interpret.verdict(pl, "uk")
+    down = dict(series_with(direction="flat", growth_pct=3.0, growth_share_pct=-14.0, direction_share="unclear",
+                            trend_share_p_value=0.3), lang="tr")
+    assert "Частка -14.0% — не підтверджене падіння" in interpret.verdict(down, "uk")
+
+
 def test_compact_comparison_says_no_language_grows_too():
     series = _many_series(15)
     for s in series:

@@ -61,6 +61,8 @@ VERDICT = {
                          "unclear": "відносний інтерес (частка в трафіку розділу) без підтвердженого тренду"},
            "with_edition": "{views} разом із трафіком усього розділу, а {share}", "but": "{views}, але {share}",
            "share_moved": " Перегляди майже не змінились, але частка теми в розділі змінилась на {rel}.",
+           "share_unconfirmed": " Частка {rel} — не {what}: тренд частки статистично незначущий (p={p}).",
+           "unconfirmed_what": {"up": "підтверджений ріст", "down": "підтверджене падіння"},
            "share_flat": " Частка теми майже не змінилась: зміна переглядів — це зміна трафіку всього розділу.",
            "share_up": " Перегляди падають, але частка теми в розділі зростає.",
            "share_down": " Перегляди ростуть, але частка теми в розділі падає.",
@@ -90,6 +92,9 @@ VERDICT = {
            "with_edition": "{views} together with the whole edition's traffic, while {share}",
            "but": "{views}, but {share}",
            "share_moved": " Views barely moved, but the topic's share of the edition changed by {rel}.",
+           "share_unconfirmed": " The {rel} share change is not a confirmed {what}: the share trend is not "
+                                "significant (p={p}).",
+           "unconfirmed_what": {"up": "growth", "down": "decline"},
            "share_flat": " The topic's share barely moved: the change in views is edition-wide traffic.",
            "share_up": " Views fall, but the topic's share of the edition grows.",
            "share_down": " Views grow, but the topic's share of the edition falls.",
@@ -102,8 +107,10 @@ SKELETON = {
     "uk": {"data": "**Дані:** Wikipedia, {start} – {end} ({n} міс.); тема: {topics}.",
            "by_lang": "**По мовах:**", "missing": "**Статті немає:** {langs} — тема там не розвинена (це теж сигнал).",
            "rank": "**Порівняння мов** (частка в трафіку розділу): {none}{share}. **Обсяг:** {volume}.",
-           "same": " (≈ без змін)",
+           "same": " (≈ без змін)", "unconfirmed": " (не підтверджено)",
            "none_grow": "за часткою жодна мова не росте (усі зміни в межах ±10%): ",
+           "none_confirmed": "підтвердженого росту за часткою немає (зміни понад ±10% без значущого тренду позначено "
+                             "«не підтверджено»): ",
            "slot": "**Висновок:** <ЗАПОВНИ: 1–3 речення лише з рядків вище — що це означає для рішення і що "
                    "перевірити далі. Без фактів і узагальнень, яких немає вище.>",
            "limits": "**Обмеження:** перегляди Wikipedia — сигнал цікавості, а не готовності платити; "
@@ -120,8 +127,10 @@ SKELETON = {
     "en": {"data": "**Data:** Wikipedia, {start} – {end} ({n} months); topic: {topics}.",
            "by_lang": "**By language:**", "missing": "**No article:** {langs} — the topic is undeveloped there (itself a signal).",
            "rank": "**Languages compared** (share of edition traffic): {none}{share}. **Volume:** {volume}.",
-           "same": " (≈ no change)",
+           "same": " (≈ no change)", "unconfirmed": " (unconfirmed)",
            "none_grow": "no language grows by share (all changes within ±10%): ",
+           "none_confirmed": "no confirmed growth by share (changes beyond ±10% without a significant trend are "
+                             "marked \"unconfirmed\"): ",
            "slot": "**Conclusion:** <FILL: 1–3 sentences using only the lines above — what it means for the "
                    "decision and what to check next. No facts or generalisations not stated above.>",
            "limits": "**Limits:** Wikipedia views measure curiosity, not willingness to pay; "
@@ -270,6 +279,9 @@ def verdict(s: dict, ui: str) -> str:
         dir=opening, g=_pct_txt(g), rel=_pct_txt(rel),
         t=_pct_txt(st.get("trend_annual_pct")), med=st.get("median_monthly"),
         level=v["level"].get(st.get("reliability"), "—"), cap=_cap_txt(st, v))
+    if unconfirmed_share(st):
+        text += v["share_unconfirmed"].format(rel=_pct_txt(rel), what=v["unconfirmed_what"]["up" if rel > 0 else "down"],
+                                              p=_p_txt(st.get("trend_share_p_value")))
     if g is not None and rel is not None and not share_told:
         if abs(g) >= 10 and abs(rel) < 10:
             text += v["share_flat"]
@@ -313,7 +325,20 @@ def _none_grow(series: list[dict], k: dict) -> str:
     "vi is the only growing audience" (Haiku, iterations 6 and 9); a mark alone does not stop that."""
     shares = [s["stats"].get("growth_share_pct") for s in series]
     shares = [x for x in shares if x is not None]
-    return k["none_grow"] if shares and max(shares) < 10 else ""
+    if not shares:
+        return ""
+    if max(shares) < 10:
+        return k["none_grow"]
+    if not any(s["stats"].get("direction_share") == "growing" for s in series) \
+            and all(s["stats"].get("direction_share") is not None for s in series):
+        return k["none_confirmed"]   # every change beyond +10 % is unconfirmed (marked so in the list)
+    return ""
+
+
+def unconfirmed_share(st: dict) -> bool:
+    """A share change beyond ±10 % whose trend is not significant: the number alone reads as growth."""
+    x = st.get("growth_share_pct")
+    return x is not None and abs(x) >= 10 and st.get("direction_share") == "unclear"
 
 
 def _compact_comparison(series: list[dict], k: dict, ui: str) -> str:
@@ -351,7 +376,7 @@ def answer_skeleton(run_dir: Path, analysis: dict, shown: list[dict] | None = No
     elif len(series) >= 2:
         def share(s):  # same ±10% band as the verdict's "share barely moved", so the two never disagree
             x = s["stats"]["growth_share_pct"]
-            return _pct_txt(x) + (k["same"] if abs(x) < 10 else "")
+            return _pct_txt(x) + (k["same"] if abs(x) < 10 else k["unconfirmed"] if unconfirmed_share(s["stats"]) else "")
         by_share = sorted((s for s in series if s["stats"].get("growth_share_pct") is not None),
                           key=lambda s: -s["stats"]["growth_share_pct"])
         by_vol = sorted(series, key=lambda s: -(s["stats"].get("median_monthly") or 0))
