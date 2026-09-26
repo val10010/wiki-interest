@@ -115,7 +115,7 @@ def test_limits_line_check_does_not_match_platform():
 def test_no_article_check_matches_the_models_wordings():
     # Iteration 11: "статті на цю тему взагалі немає" (the words apart) did not match `статт\w* немає`.
     cases = json.loads((Path(run_agent.SKILL) / "evals" / "cases.json").read_text())
-    patterns = {p for c in cases for p in c["checks"]["answer"] if "proxy" in p}
+    patterns = {p for c in cases for p in c["checks"]["answer"] if "статт" in p}   # the "no article or proxy" check
     assert patterns
     for p in patterns:
         for text in ("**Статті немає:** pl", "статті на цю тему взагалі немає", "Жодної статті про це немає",
