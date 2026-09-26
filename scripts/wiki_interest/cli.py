@@ -6,6 +6,7 @@ Commands
   show     RUN_DIR          re-print the summary of an existing run (no network)
   report   RUN_DIR          render a one-page PDF from a run
   runs                      list previous runs (for follow-up questions)
+  prune-cache [--days 62]   delete stale cache files (the history range moves monthly)
 
 Every command prints JSON; errors are {"error": ..., "hint": ...}, never a traceback.
 """
@@ -15,7 +16,7 @@ import argparse
 import json
 import sys
 
-from . import interpret, paths, pipeline, report, wiki
+from . import http, interpret, paths, pipeline, report, wiki
 
 
 def _print(obj) -> None:
@@ -85,6 +86,10 @@ def cmd_report(args):
     print(json.dumps(result, ensure_ascii=False))
 
 
+def cmd_prune_cache(args):
+    _print(http.prune_cache(args.days))
+
+
 class _Parser(argparse.ArgumentParser):
     """argparse prints usage errors to stderr and exits 2; the agent expects JSON on stdout like every
     other error. Sub-parsers inherit this class automatically."""
@@ -134,6 +139,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     l = sub.add_parser("runs", help="list previous runs (newest first)")
     l.set_defaults(func=cmd_runs)
+
+    c = sub.add_parser("prune-cache", help="delete cache files not written for DAYS (stale pageview ranges)")
+    c.add_argument("--days", type=float, default=62)
+    c.set_defaults(func=cmd_prune_cache)
     return ap
 
 

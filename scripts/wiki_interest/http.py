@@ -12,6 +12,7 @@ import json
 import os
 import time
 import warnings
+from pathlib import Path
 
 # macOS system Python links LibreSSL; urllib3 v2 warns about it on every run.
 # Harmless for HTTPS GETs, but it pollutes the agent's context, so silence it.
@@ -58,10 +59,14 @@ def get_json(url: str, params: dict | None = None, ttl: float | None = None,
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
     path = CACHE_DIR / f"{cache_key(url, params)}.json"
     if path.exists() and (ttl is None or time.time() - path.stat().st_mtime < ttl):
-        data = json.loads(path.read_text(encoding="utf-8"))
-        if isinstance(data, dict) and data.get("__not_found__"):
-            raise NotFound(url)
-        return data
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except ValueError:  # damaged file (e.g. written by an older version and cut off): refetch it
+            path.unlink()
+        else:
+            if isinstance(data, dict) and data.get("__not_found__"):
+                raise NotFound(url)
+            return data
 
     if os.environ.get("WIKI_INTEREST_OFFLINE"):
         # Cache-only mode: record what would have been fetched and treat as missing.
@@ -82,7 +87,7 @@ def get_json(url: str, params: dict | None = None, ttl: float | None = None,
             time.sleep(1.5 * errors)
             continue
         if r.status_code == 404:
-            path.write_text(json.dumps({"__not_found__": True}), encoding="utf-8")
+            _write_atomic(path, json.dumps({"__not_found__": True}))
             raise NotFound(url)
         if r.status_code == 429:
             # Per-minute quota exceeded: wait as the server says, then continue where we were.
@@ -100,9 +105,35 @@ def get_json(url: str, params: dict | None = None, ttl: float | None = None,
             continue
         r.raise_for_status()
         data = r.json()
-        path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+        _write_atomic(path, json.dumps(data, ensure_ascii=False))
         return data
     raise RuntimeError(f"Request failed after {retries} attempts: {last_err}")
+
+
+def _write_atomic(path: Path, text: str) -> None:
+    """Write to a temp file, then rename: an interrupted run never leaves a half-written file that is
+    cached forever (closed history) and would break every later run."""
+    tmp = path.with_name(f"{path.name}.{os.getpid()}.tmp")
+    try:
+        tmp.write_text(text, encoding="utf-8")
+        os.replace(tmp, path)
+    finally:
+        if tmp.exists():
+            tmp.unlink()
+
+
+def prune_cache(days: float = 62) -> dict:
+    """Delete cache files not written for `days`. The closed-history range moves every month, so its
+    old files are never read again; 62 days is past any file the current ranges can use (metadata is
+    refreshed after 30 days, the recent tail after 24 h). Worst case a pruned file is downloaded again."""
+    limit, removed, kept = time.time() - days * 86400, 0, 0
+    for f in CACHE_DIR.glob("*.json") if CACHE_DIR.exists() else []:
+        if f.stat().st_mtime < limit:
+            f.unlink()
+            removed += 1
+        else:
+            kept += 1
+    return {"removed": removed, "kept": kept, "cache_dir": str(CACHE_DIR)}
 
 
 def _retry_after(header: str | None, attempt: int) -> float:
