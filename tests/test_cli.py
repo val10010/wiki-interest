@@ -3,6 +3,8 @@
 Most tests are regressions for problems found in review and in Haiku 4.5 runs (README).
 """
 import json
+import os
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -66,8 +68,20 @@ def test_followup_does_not_overwrite_previous_run(analyze, capsys):
     assert not (Path(first["run_dir"]) / "report.pdf").exists()    # stale PDF removed
 
 
-def test_next_hint_uses_launcher(analyze):
+SKILL = Path(__file__).resolve().parents[1]
+
+
+def test_next_hint_uses_launcher(analyze, monkeypatch):
+    monkeypatch.setenv("WIKI_INTEREST_CALLER_CWD", str(SKILL))
     assert analyze("--langs", "pl")["next"].startswith("scripts/wi report ")
+
+
+def test_next_hint_is_absolute_outside_the_skill_root(analyze, monkeypatch, tmp_path):
+    # `scripts/wi` works only from the skill root; an agent elsewhere gets a command that works where it is.
+    monkeypatch.setenv("WIKI_INTEREST_CALLER_CWD", str(tmp_path))
+    out = analyze("--langs", "uk,de")
+    assert out["next"].startswith(f"{SKILL / 'scripts' / 'wi'} report ")
+    assert f"`{SKILL / 'scripts' / 'wi'} resolve" in " ".join(out["warnings"])
 
 
 # ------------------------------------------------------------------ warnings + proxies
@@ -137,7 +151,8 @@ def test_skeleton_english_ui(analyze):
     assert "willingness to pay" in sk and "<FILL" in sk
 
 
-def test_argparse_errors_are_json_too(capsys):
+def test_argparse_errors_are_json_too(capsys, monkeypatch):
+    monkeypatch.setenv("WIKI_INTEREST_CALLER_CWD", str(SKILL))
     with pytest.raises(SystemExit) as e:
         cli.main(["analyze", "--topic", "X", "--months", "abc"])
     assert e.value.code == 1
@@ -198,3 +213,41 @@ def test_proxy_for_is_named_in_data_line_limits_and_pdf(analyze, monkeypatch):
 def test_proxy_for_english_ui(analyze):
     sk = analyze("--langs", "pl", "--proxy-for", "learning English", "--ui", "en")["answer_skeleton"]
     assert "proxy for 'learning English'" in sk.split("\n")[0]
+
+
+# ------------------------------------------------------------------ paths relative to the caller (README, iteration 7)
+def test_launcher_resolves_paths_from_the_callers_directory(fake, capsys, tmp_path):
+    cli.main(["analyze", "--article", "pl:Post przerywany", "--end", "2025-08", "--out", str(tmp_path / "run")])
+    capsys.readouterr()
+    work = tmp_path / "work"
+    work.mkdir()
+    (work / "conclusion.txt").write_text("Висновок із файлу.", encoding="utf-8")
+    p = subprocess.run([str(SKILL / "scripts" / "wi"), "report", "../run", "--conclusion", "@conclusion.txt",
+                        "--out", "r.pdf"], cwd=work, capture_output=True, text=True, timeout=600,
+                       env={**os.environ, "WIKI_INTEREST_OFFLINE": "1"})
+    out = json.loads(p.stdout)
+    assert Path(out["pdf"]).resolve() == (work / "r.pdf").resolve() and (work / "r.pdf").read_bytes()[:4] == b"%PDF"
+
+
+def test_missing_file_gets_its_own_error_with_the_full_path(analyze, capsys, monkeypatch, tmp_path):
+    run = analyze("--langs", "pl")["run_dir"]
+    monkeypatch.setenv("WIKI_INTEREST_CALLER_CWD", str(tmp_path))
+    with pytest.raises(SystemExit):
+        cli.main(["report", run, "--conclusion", "@missing.txt"])
+    err = json.loads(capsys.readouterr().out)
+    assert str(tmp_path / "missing.txt") in err["error"] and "check spelling" not in err["hint"]
+    assert str(tmp_path) in err["hint"]
+    with pytest.raises(SystemExit):
+        cli.main(["show", "runs/no-such-run"])
+    err = json.loads(capsys.readouterr().out)
+    assert "no-such-run" in err["error"] and "runs" in err["hint"]
+
+
+def test_run_dir_is_found_from_the_caller_then_from_the_skill_root(analyze, capsys, monkeypatch, tmp_path):
+    run = Path(analyze("--langs", "pl")["run_dir"])
+    monkeypatch.setenv("WIKI_INTEREST_CALLER_CWD", str(run.parent.parent))
+    cli.main(["show", f"{run.parent.name}/{run.name}"])                  # relative to the caller
+    assert json.loads(capsys.readouterr().out)["run_dir"] == str(run)
+    monkeypatch.setenv("WIKI_INTEREST_CALLER_CWD", str(tmp_path))
+    cli.main(["show", f"runs/{run.name}"])                               # runs/... still works from anywhere
+    assert json.loads(capsys.readouterr().out)["run_dir"] == str(run)

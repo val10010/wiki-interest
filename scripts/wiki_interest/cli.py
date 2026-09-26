@@ -14,9 +14,8 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from pathlib import Path
 
-from . import interpret, pipeline, report, wiki
+from . import interpret, paths, pipeline, report, wiki
 
 
 def _print(obj) -> None:
@@ -46,13 +45,13 @@ def cmd_analyze(args):
         search_lang=args.search_lang, include_redirects=args.include_redirects, ui=args.ui,
         command=" ".join(sys.argv[1:]), proxy_for=args.proxy_for)
     name = args.name or pipeline.run_name(topics, langs, start, end, args.include_redirects)
-    run_dir = Path(args.out) if args.out else pipeline.RUNS_DIR / name
+    run_dir = paths.from_caller(args.out) if args.out else pipeline.RUNS_DIR / name
     pipeline.save_run(analysis, run_dir)
     _print(interpret.summary(run_dir, analysis))
 
 
 def cmd_show(args):
-    run_dir = Path(args.run_dir)
+    run_dir = paths.find_run(args.run_dir, pipeline.RUNS_DIR)
     _print(interpret.summary(run_dir, pipeline.load_run(run_dir)))
 
 
@@ -61,15 +60,15 @@ def cmd_runs(args):
 
 
 def cmd_report(args):
-    run_dir = Path(args.run_dir)
+    run_dir = paths.find_run(args.run_dir, pipeline.RUNS_DIR)
     analysis = pipeline.load_run(run_dir)
     ui = args.ui or analysis.get("ui", "uk")
     conclusion = args.conclusion
     if conclusion and conclusion.startswith("@"):
-        conclusion = Path(conclusion[1:]).read_text(encoding="utf-8")
+        conclusion = paths.from_caller(conclusion[1:]).read_text(encoding="utf-8")
     if not conclusion:
         raise SystemExit("--conclusion is required: 3-6 sentences based on the numbers in the table.")
-    out = Path(args.out) if args.out else run_dir / "report.pdf"
+    out = paths.from_caller(args.out) if args.out else run_dir / "report.pdf"
     title = args.title or ("Інтерес до теми у Wikipedia" if ui == "uk" else "Wikipedia interest report")
     fit = report.save_pdf(analysis, str(out), title, conclusion, interpret.report_caveats(analysis, ui, args.caveat), ui)
     result = {"pdf": str(out), **fit}
@@ -87,7 +86,7 @@ class _Parser(argparse.ArgumentParser):
     other error. Sub-parsers inherit this class automatically."""
 
     def error(self, message):
-        _fail(f"{self.prog}: {message}", f"see `{interpret.CMD} {self.prog.split(' ', 1)[-1]} -h` for the options")
+        _fail(f"{self.prog}: {message}", f"see `{interpret.launcher()} {self.prog.split(' ', 1)[-1]} -h` for the options")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -147,5 +146,10 @@ def main(argv=None):
         if isinstance(e.code, str):  # our own usage errors: JSON on stdout like every other error
             _fail(e.code, "fix the arguments as the error says")
         raise
+    except FileNotFoundError as e:  # a path, not the topic or the network: say which path and how it was resolved
+        _fail(f"file not found: {e.filename or e}",
+              f"relative paths (@file, --out, RUN_DIR) are resolved against the directory the command was run "
+              f"from ({paths.caller_cwd()}); RUN_DIR also against the skill root and its runs directory. Use an "
+              f"absolute path; `{interpret.launcher()} runs` lists the run directories.")
     except Exception as e:  # clear one-line error for the agent instead of a traceback
         _fail(f"{type(e).__name__}: {e}", "check spelling of language codes / topic, network access, or retry")

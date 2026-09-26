@@ -20,7 +20,7 @@ warnings.filterwarnings("ignore", message=".*OpenSSL.*")
 
 import requests  # noqa: E402
 
-SKILL_DIR = Path(__file__).resolve().parents[2]  # scripts/wiki_interest/http.py -> skill root
+from .paths import SKILL_DIR  # noqa: E402
 CACHE_DIR = Path(os.environ.get("WIKI_INTEREST_CACHE", SKILL_DIR / ".cache"))
 
 # Wikimedia wants a User-Agent with contact info (URL or email): without it the quota is

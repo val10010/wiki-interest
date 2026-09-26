@@ -8,8 +8,10 @@ compatibility: Requires Python 3.9+, bash and network access to wikimedia.org; t
 # Wiki Interest
 
 All data work is done by the CLI `scripts/wi`. Run it from this skill's root directory, or by its
-full path `<skill dir>/scripts/wi` from anywhere (it creates its own Python venv on first run and resolves
-`runs/...` against the skill root). **Never compute statistics yourself — run the tool and quote its numbers.**
+full path `<skill dir>/scripts/wi` from anywhere (it creates its own Python venv on first run). `@file` and
+`--out` are relative to *your* current directory; `runs/...` works from anywhere. Commands in the output
+(`next`, `warnings`) are already written to work from where you are. **Never compute statistics yourself —
+run the tool and quote its numbers.**
 
 ## Hard rules (check your answer against them before sending)
 

@@ -45,6 +45,16 @@ A series that starts inside the period (see step 0) → at most medium, low with
 
 **Direction of the share (`direction_share`):** the same rule applied to the article's share of the edition's traffic: `growth_share_pct`, and Theil–Sen + Mann–Kendall on log(clean views + 1) − log(edition views) (`trend_share_annual_pct`, `trend_share_p_value`). `null` without edition totals. `direction` (raw views) is kept for compatibility; the table shows both columns. In the real English-learning run, 4 of 5 languages were "declining" in views while their share was flat (vi: −23.1 % views, +2.4 % share), i.e. whole editions lost traffic, not the topic.
 
+## Paths
+
+`scripts/wi` changes to the skill root before starting Python, and passes the agent's directory in
+`WIKI_INTEREST_CALLER_CWD`. `--conclusion @file`, `--out` (analyze and report) are resolved against that directory;
+`RUN_DIR` first against it, then against the skill root, then by name in the runs directory, so the printed
+`runs/<name>` keeps working. A missing path is its own error with the full path(s) tried, not the generic
+"check spelling / network" hint. Suggested commands (`next`, commands inside `warnings`, usage hints) use `scripts/wi`
+when the agent is in the skill root and the launcher's absolute path otherwise: a relative `scripts/wi` would fail
+from any other directory, and an absolute path in every case would make answers and transcripts longer.
+
 ## PDF report
 
 One A4 page rendered with matplotlib. The table and the charts show at most 10 series, chosen and ordered like the markdown table (share change, then raw change); with more series the page says how many are shown and the `report` command returns `series_shown` / `series_total`. The agent's conclusion is wrapped at 8.6 pt; if it does not fit in 9 lines the font shrinks to 7.8 and then 7 pt (13 lines); beyond that it is cut with an ellipsis and the command returns `conclusion_truncated: true` with a hint. The method paragraph always fits; caveats fill the remaining lines in priority order (proxy, low reliability, user caveats, then the general ones) and the count of shown ones is returned. Titles in scripts that no installed font can draw (CJK, Thai, Indic on a bare Linux box) are replaced by the English label of the concept, with a note under the table.

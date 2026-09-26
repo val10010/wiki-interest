@@ -8,10 +8,16 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from . import stats
+from . import paths, stats
 
 TRENDS = ("growing", "declining")
 CMD = "scripts/wi"  # how the agent invokes the skill, relative to the skill root
+
+
+def launcher() -> str:
+    """CMD when the agent works in the skill root, else the launcher's absolute path, so every command
+    the output suggests works from where the agent actually is."""
+    return CMD if paths.caller_cwd().resolve() == paths.SKILL_DIR else str(paths.SKILL_DIR / CMD)
 
 GLOBAL_CAVEATS = {
     "uk": [
@@ -316,7 +322,7 @@ def summary(run_dir: Path, analysis: dict) -> dict:
         "chart": str(run_dir / "chart.png"),
         "period": analysis["period"],
         "topics": analysis["topics"],
-        "warnings": analysis.get("warnings", []),
+        "warnings": [w.replace(f"`{CMD} ", f"`{launcher()} ") for w in analysis.get("warnings", [])],
         # Placement measured on Haiku 4.5: here it was copied in 2/5 answers, as the last
         # field (list of lines) in 0/5. Run-to-run noise is large; see README, iteration 4.
         "answer_skeleton": answer_skeleton(run_dir, analysis),
@@ -327,7 +333,7 @@ def summary(run_dir: Path, analysis: dict) -> dict:
                                "spike_share_pct", "spikes", "seasonal_peaks", "reasons")}
                     for s in analysis["series"]},
         "caveats": analysis["caveats"],
-        "next": f"{CMD} report {run_dir} --title '...' --conclusion '...'",
+        "next": f"{launcher()} report {run_dir} --title '...' --conclusion '...'",
     }
 
 

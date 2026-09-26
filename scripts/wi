@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Launcher: creates .venv in the skill root on first use, then runs the CLI.
-# Works from any directory; relative paths (runs/...) resolve against the skill root.
+# Works from any directory. The CLI resolves @file / --out / RUN_DIR against the caller's directory
+# (WIKI_INTEREST_CALLER_CWD), RUN_DIR also against the skill root, so runs/... works from anywhere.
 set -euo pipefail
 SCRIPTS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(dirname "$SCRIPTS")"
@@ -22,5 +23,6 @@ if [ ! -f "$MARKER" ] || [ "$ROOT/requirements.txt" -nt "$MARKER" ]; then
   }
   touch "$MARKER"
 fi
+export WIKI_INTEREST_CALLER_CWD="$PWD"
 cd "$ROOT"
 PYTHONPATH="$SCRIPTS${PYTHONPATH:+:$PYTHONPATH}" exec "$ROOT/.venv/bin/python" -m wiki_interest "$@"
