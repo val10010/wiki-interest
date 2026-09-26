@@ -181,6 +181,7 @@ def save_run(analysis: dict, run_dir: Path) -> None:
         stale.unlink()  # derived from the previous analysis.json, which is being replaced
     (run_dir / "analysis.json").write_text(json.dumps(analysis, ensure_ascii=False, indent=1), encoding="utf-8")
     charts.save_chart(analysis, str(run_dir / "chart.png"), analysis["ui"])
+    (run_dir / interpret.FULL_FILE).write_text(interpret.full_text(run_dir, analysis), encoding="utf-8")
 
 
 def load_run(run_dir: Path) -> dict:

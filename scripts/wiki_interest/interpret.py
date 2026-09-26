@@ -6,11 +6,16 @@ phrase them themselves, so every sentence the user must see is generated here
 """
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from . import paths, stats
 
 TRENDS = ("growing", "declining")
+MAX_OUTPUT_CHARS = 15000  # analyze/show stdout; agent shells cut at ~30k, leave room for the rest of the context
+MAX_TOP = 10              # at most this many full verdicts once the output has to be cut (as many series as the PDF)
+COMPACT_LIMIT = 400       # languages in the compact comparison line
+FULL_FILE = "all_series.md"
 CMD = "scripts/wi"  # how the agent invokes the skill, relative to the skill root
 
 
@@ -100,6 +105,10 @@ SKELETON = {
            "low": " Низька надійність: {names} — лише як слабкий сигнал.",
            "proxy_for": " (proxy для «{what}»: стаття міряє ширше поняття, а не саме цей інтерес)",
            "proxy_for_limit": " «{topics}» — лише proxy для «{what}»: висновки про «{what}» непрямі.",
+           "shown": "**Показано {n} з {total} серій** (найбільша зміна частки); усі вердикти й повна таблиця: {path}",
+           "rank_compact": "**Порівняння мов** (усі {total}; зміна частки в трафіку розділу, ≈ = у межах ±10%; "
+                           "у дужках — медіана переглядів/міс): {items}.",
+           "more": "… ще {n}",
            "chart": "**Графік:** {path}"},
     "en": {"data": "**Data:** Wikipedia, {start} – {end} ({n} months); topic: {topics}.",
            "by_lang": "**By language:**", "missing": "**No article:** {langs} — the topic is undeveloped there (itself a signal).",
@@ -113,6 +122,10 @@ SKELETON = {
            "low": " Low reliability: {names} — a weak signal only.",
            "proxy_for": " (a proxy for '{what}': the article measures a broader concept, not this interest itself)",
            "proxy_for_limit": " '{topics}' is only a proxy for '{what}': conclusions about '{what}' are indirect.",
+           "shown": "**Showing {n} of {total} series** (largest share change); all verdicts and the full table: {path}",
+           "rank_compact": "**Languages compared** (all {total}; share of edition traffic change, ≈ = within ±10%; "
+                           "median views/month in brackets): {items}.",
+           "more": "… {n} more",
            "chart": "**Chart:** {path}"},
 }
 
@@ -249,24 +262,54 @@ def verdict(s: dict, ui: str) -> str:
     return text
 
 
-def answer_skeleton(run_dir: Path, analysis: dict) -> str:
+def _names(items: list[str], ui: str, limit: int = 20) -> str:
+    """Comma-separated list, cut after `limit` items so 300 languages do not flood the answer."""
+    more = SKELETON[ui]["more"].format(n=len(items) - limit) if len(items) > limit else ""
+    return ", ".join(items[:limit]) + (" " + more if more else "")
+
+
+def _tag(s: dict) -> str:
+    return s["lang"] + (f" ({s['topic']})" if s.get("multi_topic") else "")
+
+
+def _volume_txt(x) -> str:
+    x = x or 0
+    return f"{x / 1e6:.1f}M" if x >= 1e6 else f"{x / 1e3:.1f}k" if x >= 1e4 else str(x)
+
+
+def _compact_comparison(series: list[dict], k: dict, ui: str) -> str:
+    """Every language in one line (share change rounded, volume short): the comparison stays complete
+    when verdicts are shown only for the top series."""
+    items = []
+    for s in sorted(series, key=rank_key, reverse=True):
+        x = s["stats"].get("growth_share_pct")
+        if x is None:
+            x = s["stats"].get("growth_pct")
+        chg = "—" if x is None else ("≈" if abs(x) < 10 else "") + f"{x:+.0f}%"
+        items.append(f"{_tag(s)} {chg} ({_volume_txt(s['stats'].get('median_monthly'))})")
+    return k["rank_compact"].format(total=len(series), items=_names(items, ui, COMPACT_LIMIT))
+
+
+def answer_skeleton(run_dir: Path, analysis: dict, shown: list[dict] | None = None) -> str:
     """The whole user-facing answer except one slot. Weak models reliably copy
     text but drop rules (limits line, seasonal peaks, proxy caveat), so every
-    mandatory element is already written here; the model fills only the slot."""
+    mandatory element is already written here; the model fills only the slot.
+    `shown`: the series to write verdicts for when not all fit (see summary)."""
     ui = analysis.get("ui", "uk")
     k, series, p = SKELETON[ui], analysis["series"], analysis["period"]
     topics, what = ", ".join(t["topic"] for t in analysis["topics"]), analysis.get("proxy_for")
     data = k["data"].format(start=p["start"], end=p["end"], n=p["months"], topics=topics)
     if what:
         data = data[:-1] + k["proxy_for"].format(what=what) + "."
-    lines = [data, k["by_lang"]] + [f"- {verdict(s, ui)}" for s in series]
+    lines = [data, k["by_lang"]] + [f"- {verdict(s, ui)}" for s in (series if shown is None else shown)]
+    if shown is not None:
+        lines.append(k["shown"].format(n=len(shown), total=len(series), path=run_dir / FULL_FILE))
     missing = sorted({l for t in analysis["topics"] for l in t["missing_languages"]})
     if missing:
-        lines.append(k["missing"].format(langs=", ".join(missing)))
-    if len(series) >= 2:
-        def tag(s):
-            return s["lang"] + (f" ({s['topic']})" if s.get("multi_topic") else "")
-
+        lines.append(k["missing"].format(langs=_names(missing, ui, 30)))
+    if shown is not None:
+        lines.append(_compact_comparison(series, k, ui))
+    elif len(series) >= 2:
         def share(s):  # same ±10% band as the verdict's "share barely moved", so the two never disagree
             x = s["stats"]["growth_share_pct"]
             return _pct_txt(x) + (k["same"] if abs(x) < 10 else "")
@@ -274,18 +317,18 @@ def answer_skeleton(run_dir: Path, analysis: dict) -> str:
                           key=lambda s: -s["stats"]["growth_share_pct"])
         by_vol = sorted(series, key=lambda s: -(s["stats"].get("median_monthly") or 0))
         lines.append(k["rank"].format(
-            share=" > ".join(f"{tag(s)} {share(s)}" for s in by_share) or "—",
-            volume=" > ".join(f"{tag(s)} {s['stats'].get('median_monthly')}" for s in by_vol)))
+            share=" > ".join(f"{_tag(s)} {share(s)}" for s in by_share) or "—",
+            volume=" > ".join(f"{_tag(s)} {s['stats'].get('median_monthly')}" for s in by_vol)))
     lines.append(k["slot"])
     limits = k["limits"]
     if what:
         limits += k["proxy_for_limit"].format(topics=topics, what=what)
     proxies = [s["lang"] for s in series if s.get("proxy")]
     if proxies:
-        limits += k["proxy"].format(langs=", ".join(proxies))
+        limits += k["proxy"].format(langs=_names(proxies, ui))
     low = [s["lang"] for s in series if s["stats"].get("reliability") == "low"]
     if low:
-        limits += k["low"].format(names=", ".join(low))
+        limits += k["low"].format(names=_names(low, ui))
     lines += [limits, k["chart"].format(path=run_dir / "chart.png")]
     return "\n".join(lines)
 
@@ -315,26 +358,66 @@ def table_md(series: list[dict]) -> str:
     return "\n".join(rows)
 
 
-def summary(run_dir: Path, analysis: dict) -> dict:
-    """What `analyze` / `show` print for the agent."""
-    return {
+def _summary(run_dir: Path, analysis: dict, top: int | None) -> dict:
+    ui, series = analysis.get("ui", "uk"), analysis["series"]
+    shown = None if top is None else sorted(series, key=rank_key, reverse=True)[:top]
+    listed = series if shown is None else shown
+    warnings = [w.replace(f"`{CMD} ", f"`{launcher()} ") for w in analysis.get("warnings", [])]
+    if shown is not None:  # keep whole warnings while they fit a quarter of the budget, count the rest
+        kept, used = [], 0
+        for w in warnings:
+            if used + len(w) > MAX_OUTPUT_CHARS // 4:
+                kept.append(f"... {len(warnings) - len(kept)} more warnings in {run_dir / FULL_FILE}")
+                break
+            kept.append(w)
+            used += len(w)
+        warnings = kept
+    out = {
         "run_dir": str(run_dir),
         "chart": str(run_dir / "chart.png"),
         "period": analysis["period"],
         "topics": analysis["topics"],
-        "warnings": [w.replace(f"`{CMD} ", f"`{launcher()} ") for w in analysis.get("warnings", [])],
+        "warnings": warnings,
         # Placement measured on Haiku 4.5: here it was copied in 2/5 answers, as the last
         # field (list of lines) in 0/5. Run-to-run noise is large; see README, iteration 4.
-        "answer_skeleton": answer_skeleton(run_dir, analysis),
-        "verdicts": [verdict(s, analysis.get("ui", "uk")) for s in analysis["series"]],
-        "table": table_md(analysis["series"]),
+        "answer_skeleton": answer_skeleton(run_dir, analysis, shown),
+        "verdicts": [verdict(s, ui) for s in listed],
+        "table": table_md(listed),
         "details": {s["id"]: {k: s["stats"].get(k) for k in
                               ("growth_raw_pct", "project_growth_pct", "per_million_views_last12",
                                "spike_share_pct", "spikes", "seasonal_peaks", "reasons")}
-                    for s in analysis["series"]},
+                    for s in listed},
         "caveats": analysis["caveats"],
-        "next": f"{launcher()} report {run_dir} --title '...' --conclusion '...'",
     }
+    if shown is not None:
+        out["shown"] = {"series_shown": len(shown), "series_total": len(series), "full": str(run_dir / FULL_FILE)}
+    out["next"] = f"{launcher()} report {run_dir} --title '...' --conclusion '...'"
+    return out
+
+
+def summary(run_dir: Path, analysis: dict) -> dict:
+    """What `analyze` / `show` print for the agent. Agent shells cut long output (Claude Code at ~30k
+    characters), which would cut the skeleton before its slot; each series costs ~1k characters. So when
+    everything does not fit MAX_OUTPUT_CHARS, verdicts, table and details are given for the top series by
+    rank_key (as many as fit), with a compact comparison of all languages and the full file's path."""
+    out = _summary(run_dir, analysis, None)
+    top = min(len(analysis["series"]) - 1, MAX_TOP)
+    while _size(out) > MAX_OUTPUT_CHARS and top >= 1:
+        out = _summary(run_dir, analysis, top)
+        top -= 1
+    return out
+
+
+def _size(obj) -> int:
+    return len(json.dumps(obj, ensure_ascii=False, indent=1))  # as cli._print prints it
+
+
+def full_text(run_dir: Path, analysis: dict) -> str:
+    """FULL_FILE: everything summary() may leave out — every verdict, the full table, every warning."""
+    ui = analysis.get("ui", "uk")
+    return "\n\n".join([f"# {run_dir.name}", table_md(analysis["series"]),
+                         "\n".join(f"- {verdict(s, ui)}" for s in analysis["series"]),
+                         "\n".join(f"- {w}" for w in analysis.get("warnings", []))]) + "\n"
 
 
 def report_caveats(analysis: dict, ui: str, extra: list[str] | None = None) -> list[str]:

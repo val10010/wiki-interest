@@ -103,3 +103,53 @@ def test_verdict_reports_share_change_when_views_are_flat(series_with):
 def test_table_has_both_directions(series_with):
     t = interpret.table_md([series_with(direction="declining", direction_share="flat")])
     assert "| direction | direction (share) |" in t.split("\n")[0] and "| declining | flat |" in t
+
+
+# ------------------------------------------------------------------ output size (README, iteration 7)
+def _many_series(n):
+    """n realistic series: stats computed from random data; a third tiny, some new articles."""
+    import numpy as np
+    from wiki_interest import stats
+    months = [f"{2024 + k // 12}-{k % 12 + 1:02d}" for k in range(24)]
+    rng = np.random.default_rng(0)
+    out = []
+    for i in range(n):
+        vol = [80, 2000, 40000][i % 3]
+        v = (vol * (1 + rng.uniform(-.4, .6)) ** (np.arange(24) / 12) * np.exp(rng.normal(0, .2, 24))).astype(int)
+        if i % 7 == 0:
+            v[:9] = 0
+        st = stats.analyze_series(months, [int(x) for x in v], [10**8] * 24)
+        st.pop("_clean")
+        lang = f"x{i:03d}"
+        out.append({"id": f"english-language|{lang}", "topic": "English language", "lang": lang, "titles": ["Anglų kalba"],
+                    "title": "Anglų kalba", "proxy": None, "rename_fix": None, "months": months, "stats": st})
+    return out
+
+
+def test_summary_for_300_languages_fits_the_agent_output_limit():
+    import json
+    series = _many_series(300)
+    topics = [{"topic": "English language", "resolved": [], "alternatives": [],
+               "missing_languages": [f"m{i}" for i in range(40)]}]
+    analysis = {"ui": "uk", "proxy_for": None, "period": {"start": "2024-01", "end": "2025-12", "months": 24},
+                "topics": topics, "series": series, "warnings": interpret.build_warnings(topics, series),
+                "caveats": list(interpret.GLOBAL_CAVEATS["uk"])}
+    run_dir = Path("/home/someone/.local/share/wiki-interest/runs/english-language_300langs-abcdef_202401-202512")
+    out = interpret.summary(run_dir, analysis)
+    text = json.dumps(out, ensure_ascii=False, indent=1)
+    assert len(text) <= interpret.MAX_OUTPUT_CHARS
+    sk = out["answer_skeleton"]
+    assert sk.count("<ЗАПОВНИ") == 1 and "**Обмеження:**" in sk and "готовності платити" in sk
+    n = out["shown"]["series_shown"]
+    assert 3 <= n < 300 and out["shown"]["series_total"] == 300 and len(out["verdicts"]) == n
+    assert f"Показано {n} з 300" in sk and str(run_dir / interpret.FULL_FILE) in sk
+    comparison = next(l for l in sk.split("\n") if l.startswith("**Порівняння мов**"))
+    assert all(s["lang"] in comparison for s in series)                    # compact, but every language
+
+
+def test_small_summary_is_unchanged(series_with):
+    s = dict(series_with(), id="t|pl")
+    analysis = {"ui": "uk", "period": {"start": "2024-01", "end": "2025-12", "months": 24},
+                "topics": [{"topic": "t", "missing_languages": []}], "series": [s], "caveats": []}
+    out = interpret.summary(Path("runs/x"), analysis)
+    assert "shown" not in out and len(out["verdicts"]) == 1

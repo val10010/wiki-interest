@@ -52,7 +52,11 @@ def cmd_analyze(args):
 
 def cmd_show(args):
     run_dir = paths.find_run(args.run_dir, pipeline.RUNS_DIR)
-    _print(interpret.summary(run_dir, pipeline.load_run(run_dir)))
+    analysis = pipeline.load_run(run_dir)
+    full = run_dir / interpret.FULL_FILE
+    if not full.exists():  # runs saved before the file existed
+        full.write_text(interpret.full_text(run_dir, analysis), encoding="utf-8")
+    _print(interpret.summary(run_dir, analysis))
 
 
 def cmd_runs(args):

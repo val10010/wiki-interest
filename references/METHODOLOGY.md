@@ -55,6 +55,18 @@ A series that starts inside the period (see step 0) → at most medium, low with
 when the agent is in the skill root and the launcher's absolute path otherwise: a relative `scripts/wi` would fail
 from any other directory, and an absolute path in every case would make answers and transcripts longer.
 
+## Output size
+
+Each series adds ~1000 characters to the `analyze` / `show` JSON (verdict twice, table row, details), so `--langs all`
+(~300 editions) printed ~300 k characters; agent shells cut tool output (Claude Code at ~30 k), which cut the answer
+skeleton before its slot. The output is limited to 15 000 characters (half of that cut, leaving room for the rest of
+the context): if everything does not fit, verdicts, table and details are given only for the top series by the table
+order (share change), at most 10 (as in the PDF) and as many as fit; the skeleton then says "showing N of M", keeps a
+compact comparison of **every** language (`xx ≈+2% (14.6k)`: share change and median views), the slot and the limits
+line, and points to `all_series.md` in the run directory (full table, all verdicts, all warnings). Measured on synthetic
+series: 15 languages → 10 shown (12.5 k characters instead of 17 k), 40 → 10, 300 → 5 (14.6 k instead of 295 k).
+Long lists inside lines (missing, low-reliability languages) are cut after 20–30 names with "… N more".
+
 ## PDF report
 
 One A4 page rendered with matplotlib. The table and the charts show at most 10 series, chosen and ordered like the markdown table (share change, then raw change); with more series the page says how many are shown and the `report` command returns `series_shown` / `series_total`. The agent's conclusion is wrapped at 8.6 pt; if it does not fit in 9 lines the font shrinks to 7.8 and then 7 pt (13 lines); beyond that it is cut with an ellipsis and the command returns `conclusion_truncated: true` with a hint. The method paragraph always fits; caveats fill the remaining lines in priority order (proxy, low reliability, user caveats, then the general ones) and the count of shown ones is returned. Titles in scripts that no installed font can draw (CJK, Thai, Indic on a bare Linux box) are replaced by the English label of the concept, with a note under the table.
